@@ -4,4 +4,8 @@ mod vm;
 fn main() {
     let mut vm = vm::VM::new();
     vm.load_program_from_file("challenge.bin").unwrap();
+
+    loop {
+        vm.cycle().unwrap();
+    }
 }

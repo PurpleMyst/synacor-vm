@@ -40,4 +40,23 @@ impl VM {
 
         Ok(())
     }
+
+    pub fn cycle(&mut self) -> Result<(), String> {
+        let should_increment_pc = true;
+
+        match self.memory[self.pc] {
+            unknown_opcode => {
+                return Err(format!(
+                    "Unknown opcode {} (at memory location {:x})",
+                    unknown_opcode, self.pc
+                ))
+            }
+        }
+
+        if should_increment_pc {
+            self.pc += 1;
+        }
+
+        Ok(())
+    }
 }
