@@ -99,6 +99,13 @@ impl VM {
             }
         }
 
+        macro_rules! binary_operation {
+            ($a:ident = $b:ident $op:tt $c:ident) => {
+                let __result = (self.load($b)? $op self.load($c)?) % MAX_VALUE;
+                self.set($a, __result)?;
+            }
+        }
+
         match self.memory[self.pc] {
             // halt: 0
             //   stop execution and terminate the program
@@ -194,23 +201,56 @@ impl VM {
 
             // mult: 10 a b c
             //   store into <a> the product of <b> and <c> (modulo 32768)
-            10 => { unknown_opcode!(10); },
+            10 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+                let c = self.next_argument();
+
+                // XXX: Does this want Rust-style remainder or C-style modulus?
+                binary_operation!(a = b * c);
+            },
 
             // mod: 11 a b c
             //   store into <a> the remainder of <b> divided by <c>
-            11 => { unknown_opcode!(11); },
+            11 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+                let c = self.next_argument();
+
+                // XXX: Does this want Rust-style remainder or C-style modulus?
+                binary_operation!(a = b % c);
+            },
 
             // and: 12 a b c
             //   stores into <a> the bitwise and of <b> and <c>
-            12 => { unknown_opcode!(12); },
+            12 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+                let c = self.next_argument();
+
+                binary_operation!(a = b & c);
+            },
 
             // or: 13 a b c
             //   stores into <a> the bitwise or of <b> and <c>
-            13 => { unknown_opcode!(13); },
+            13 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+                let c = self.next_argument();
+
+                binary_operation!(a = b | c);
+            },
 
             // not: 14 a b
             //   stores 15-bit bitwise inverse of <b> in <a>
-            14 => { unknown_opcode!(14); },
+            14 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+
+                let b_value = self.load(b)?;
+
+                self.set(a, (!b_value) & ((1 << INTEGER_SIZE) - 1))?;
+            }
 
             // rmem: 15 a b
             //   read memory at address <b> and write it to <a>
