@@ -60,6 +60,19 @@ impl VM {
         }
     }
 
+    fn set(&mut self, destination_address: u16, source_address: u16) -> Result<(), String> {
+        let source = self.load(source_address)?;
+
+        let destination = if destination_address >= 32768 && destination_address <= 32775 {
+            &mut self.registers[(destination_address - 32768) as usize]
+        } else {
+            return Err(format!("Tried to store at invalid address {} (at location 0x{:x})", destination_address, self.pc))
+        };
+
+        *destination = source;
+        Ok(())
+    }
+
     pub fn cycle(&mut self) -> Result<bool, String> {
         let mut should_increment_pc = true;
 
@@ -83,7 +96,11 @@ impl VM {
 
             // set: 1 a b
             //   set register <a> to the value of <b>
-            1 => { unknown_opcode!(1); },
+            1 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+                self.set(a, b)?;
+            }
 
             // push: 2 a
             //   push <a> onto the stack
