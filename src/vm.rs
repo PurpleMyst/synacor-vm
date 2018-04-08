@@ -66,7 +66,7 @@ impl VM {
         let destination = if destination_address >= 32768 && destination_address <= 32775 {
             &mut self.registers[(destination_address - 32768) as usize]
         } else {
-            return Err(format!("Tried to store at invalid address {} (at location 0x{:x})", destination_address, self.pc))
+            return Err(format!("Tried to store at invalid register {} (at location 0x{:x})", destination_address, self.pc))
         };
 
         *destination = source;
@@ -149,7 +149,14 @@ impl VM {
 
             // add: 9 a b c
             //   assign into <a> the sum of <b> and <c> (modulo 32768)
-            9 => { unknown_opcode!(9); },
+            9 => { 
+                let a = self.next_argument();
+                let b = self.next_argument();
+                let c = self.next_argument();
+
+                let result = (self.load(b)? + self.load(c)?) % MAX_VALUE;
+                self.set(a, result)?;
+            },
 
             // mult: 10 a b c
             //   store into <a> the product of <b> and <c> (modulo 32768)
