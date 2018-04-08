@@ -278,7 +278,13 @@ impl VM {
 
             // ret: 18
             //   remove the top element from the stack and jump to it; empty stack = halt
-            18 => { unknown_opcode!(18); },
+            18 => {
+                if let Some(tos) = self.stack.pop() {
+                    jmp!(tos);
+                } else {
+                    halt!();
+                }
+            },
 
             // out: 19 a
             //   write the character represented by ascii code <a> to the terminal
