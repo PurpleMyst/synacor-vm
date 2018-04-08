@@ -1,15 +1,15 @@
 use std::{fs, io};
 
 const INTEGER_SIZE: usize = 15;
-const MAX_VALUE: usize = 1 << INTEGER_SIZE;
+const MAX_VALUE: u16 = 1 << INTEGER_SIZE;
+const ADDRESS_SPACE: usize = MAX_VALUE as usize;
 const REGISTER_COUNT: usize = 8;
 
 pub type Stack<T> = Vec<T>;
 
 #[allow(dead_code)]
 pub struct VM {
-    // Our address space is 15 bits long, so our max address is the same as the max value.
-    memory: [u16; MAX_VALUE],
+    memory: [u16; ADDRESS_SPACE],
     registers: [u16; REGISTER_COUNT],
     stack: Stack<u16>,
 
@@ -19,7 +19,7 @@ pub struct VM {
 impl VM {
     pub fn new() -> Self {
         Self {
-            memory: [0; MAX_VALUE],
+            memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
             stack: Stack::new(),
 
