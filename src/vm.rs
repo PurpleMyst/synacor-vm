@@ -262,11 +262,24 @@ impl VM {
 
             // rmem: 15 a b
             //   read memory at address <b> and write it to <a>
-            15 => { unknown_opcode!(15); },
+            15 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+
+                let memory_value = self.memory[self.load(b)? as usize];
+                self.set(a, memory_value)?;
+            },
 
             // wmem: 16 a b
             //   write the value from <b> into memory at address <a>
-            16 => { unknown_opcode!(16); },
+            16 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+
+                let memory_location = self.load(a)? as usize;
+                let b_value = self.load(b)?;
+                self.memory[memory_location] = b_value;
+            },
 
             // call: 17 a
             //   write the address of the next instruction to the stack and jump to <a>
