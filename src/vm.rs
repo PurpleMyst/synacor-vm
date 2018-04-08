@@ -89,6 +89,16 @@ impl VM {
             }
         }
 
+        macro_rules! bool_operation {
+            ($a:ident = $b:ident $op:tt $c:ident) => {
+                if self.load($b)? $op self.load($c)? {
+                    self.set($a, 1)?;
+                } else {
+                    self.set($a, 0)?;
+                }
+            }
+        }
+
         match self.memory[self.pc] {
             // halt: 0
             //   stop execution and terminate the program
@@ -117,11 +127,7 @@ impl VM {
                 let b = self.next_argument();
                 let c = self.next_argument();
 
-                if self.load(b)? == self.load(c)? {
-                    self.set(a, 1)?;
-                } else {
-                    self.set(a, 0)?;
-                }
+                bool_operation!(a = b == c);
             }
 
             // gt: 5 a b c
