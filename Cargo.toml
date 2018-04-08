@@ -1,0 +1,6 @@
+[package]
+name = "synacor-vm"
+version = "0.1.0"
+authors = ["Purple Myst <PurpleMyst@users.noreply.github.com>"]
+
+[dependencies]
