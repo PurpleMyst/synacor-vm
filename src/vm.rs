@@ -54,7 +54,7 @@ impl VM {
         if address <= 32767 {
             Ok(address)
         } else if address <= 32775 {
-            Ok(self.registers[(address - 32767) as usize])
+            Ok(self.registers[(address - 32768) as usize])
         } else {
             Err(format!("Tried to load invalid address {} (at location 0x{:x})", address, self.pc))
         }
@@ -110,11 +110,25 @@ impl VM {
 
             // jt: 7 a b
             //   if <a> is nonzero, jump to <b>
-            7 => { unknown_opcode!(7); },
+            7 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+
+                if self.load(a)? != 0 {
+                    jmp!(b);
+                }
+            }
 
             // jf: 8 a b
             //   if <a> is zero, jump to <b>
-            8 => { unknown_opcode!(8); },
+            8 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+
+                if self.load(a)? == 0 {
+                    jmp!(b);
+                }
+            }
 
             // add: 9 a b c
             //   assign into <a> the sum of <b> and <c> (modulo 32768)
