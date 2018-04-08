@@ -69,6 +69,13 @@ impl VM {
             }
         }
 
+        macro_rules! jmp {
+            ($location: expr) => {
+                self.pc = ($location) as usize;
+                should_increment_pc = false;
+            }
+        }
+
         match self.memory[self.pc] {
             // halt: 0
             //   stop execution and terminate the program
@@ -98,8 +105,7 @@ impl VM {
             //   jump to <a>
             6 => {
                 let a = self.next_argument();
-                self.pc = a;
-                should_increment_pc = false;
+                jmp!(a);
             },
 
             // jt: 7 a b
