@@ -1,4 +1,7 @@
-use std::{fs, io::{self, Read}, num::Wrapping};
+use std::{fmt, fs, io::{self, Read}, num::Wrapping};
+
+use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 const INTEGER_SIZE: usize = 15;
 const MAX_VALUE: u16 = 1 << INTEGER_SIZE;
@@ -7,13 +10,131 @@ const REGISTER_COUNT: usize = 8;
 
 pub type Stack<T> = Vec<T>;
 
-#[allow(dead_code)]
 pub struct VM {
     memory: [u16; ADDRESS_SPACE],
     registers: [u16; REGISTER_COUNT],
     stack: Stack<u16>,
 
     pc: usize,
+}
+
+impl Serialize for VM {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("VM", 4)?;
+
+        macro_rules! u16slice_to_vec {
+            (self. $name:ident) => {
+                &self.$name.iter().map(|x| *x).collect::<Vec<u16>>()
+            };
+        }
+
+        state.serialize_field("memory", u16slice_to_vec!(self.memory))?;
+        state.serialize_field("registers", u16slice_to_vec!(self.registers))?;
+        state.serialize_field("stack", &self.stack)?;
+        state.serialize_field("pc", &self.pc)?;
+        state.end()
+    }
+}
+
+// Lasciate ogne speranza, voi ch'intrate
+impl<'de> Deserialize<'de> for VM {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        enum VMField {
+            U16Array(Vec<u16>),
+            USize(usize),
+        };
+
+        impl<'de> Deserialize<'de> for VMField {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<VMField, D::Error> {
+                struct ValueVisitor;
+
+                impl<'de> Visitor<'de> for ValueVisitor {
+                    type Value = VMField;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                        formatter.write_str("stuff")
+                    }
+
+                    fn visit_u64<E: de::Error>(self, value: u64) -> Result<VMField, E> {
+                        Ok(VMField::USize(value as usize))
+                    }
+
+                    fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<VMField, V::Error> {
+                        let mut result = Vec::new();
+                        while let Some(element) = seq.next_element()? {
+                            result.push(element);
+                        }
+                        Ok(VMField::U16Array(result))
+                    }
+                }
+
+                deserializer.deserialize_any(ValueVisitor)
+            }
+        }
+
+        struct VMVisitor;
+
+        impl<'de> Visitor<'de> for VMVisitor {
+            type Value = VM;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct VM")
+            }
+
+            fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<VM, V::Error> {
+                macro_rules! next_element {
+                    ($index:expr) => {
+                        seq.next_element()?
+                            .ok_or_else(|| de::Error::invalid_length($index, &self))?;
+                    };
+                }
+
+                let memory_values: Vec<u16> = next_element!(0);
+                let registers_values: Vec<u16> = next_element!(1);
+                let stack: Stack<u16> = next_element!(2);
+                let pc: usize = next_element!(3);
+
+                let mut memory = [0; ADDRESS_SPACE];
+                memory.copy_from_slice(&memory_values);
+
+                let mut registers = [0; REGISTER_COUNT];
+                registers.copy_from_slice(&registers_values);
+
+                Ok(VM {
+                    memory,
+                    registers,
+                    stack,
+                    pc,
+                })
+            }
+
+            fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<VM, V::Error> {
+                let mut memory = [0; ADDRESS_SPACE];
+                let mut registers = [0; REGISTER_COUNT];
+                let mut stack: Option<Stack<u16>> = None;
+                let mut pc: Option<usize> = None;
+
+                while let Some((key, value)) = map.next_entry()? {
+                    match (key, value) {
+                        ("memory", VMField::U16Array(slice)) => memory.copy_from_slice(&slice),
+                        ("registers", VMField::U16Array(slice)) => registers.copy_from_slice(&slice),
+                        ("stack", VMField::U16Array(slice)) => stack = Some(Stack::from(slice)),
+                        ("pc", VMField::USize(value)) => pc = Some(value),
+                        _ => return Err(de::Error::custom("invalid key/value combination"))
+                    }
+                }
+
+                Ok(VM {
+                    memory,
+                    registers,
+                    stack: stack.ok_or_else(|| de::Error::missing_field("stack"))?,
+                    pc: pc.ok_or_else(|| de::Error::missing_field("pc"))?,
+                })
+            }
+        }
+
+        deserializer.deserialize_struct("VM", &["memory", "registers", "stack", "pc"], VMVisitor)
+    }
 }
 
 impl VM {
@@ -43,8 +164,9 @@ impl VM {
 
     #[inline(always)]
     fn next_argument(&mut self) -> u16 {
+        let value = self.memory[self.pc];
         self.pc += 1;
-        self.memory[self.pc]
+        value
     }
 
     fn load(&self, address: u16) -> Result<u16, String> {
@@ -56,7 +178,10 @@ impl VM {
         } else if address <= 32775 {
             Ok(self.registers[(address - 32768) as usize])
         } else {
-            Err(format!("Tried to load invalid address {} (at location 0x{:x})", address, self.pc))
+            Err(format!(
+                "Tried to load invalid address {} (at location 0x{:x})",
+                address, self.pc
+            ))
         }
     }
 
@@ -66,7 +191,10 @@ impl VM {
         let destination = if destination_address >= 32768 && destination_address <= 32775 {
             &mut self.registers[(destination_address - 32768) as usize]
         } else {
-            return Err(format!("Tried to store at invalid register {} (at location 0x{:x})", destination_address, self.pc))
+            return Err(format!(
+                "Tried to store at invalid register {} (at location 0x{:x})",
+                destination_address, self.pc
+            ));
         };
 
         *destination = source;
@@ -74,13 +202,10 @@ impl VM {
     }
 
     pub fn cycle(&mut self) -> Result<bool, String> {
-        let mut should_increment_pc = true;
-
         macro_rules! jmp {
-            ($location: expr) => {
+            ($location:expr) => {
                 self.pc = self.load($location)? as usize;
-                should_increment_pc = false;
-            }
+            };
         }
 
         macro_rules! bool_operation {
@@ -97,21 +222,25 @@ impl VM {
             ($a:ident = $b:ident $op:tt $c:ident) => {
                 // XXX: I don't exactly like creating a new `Wrapping` every time. Maybe I should
                 // utilize `wrapped_{add, mul, ...}` instead.
-                let __result = (Wrapping(self.load($b)?) $op Wrapping(self.load($c)?)).0 % MAX_VALUE;
+                let __result =
+                    (Wrapping(self.load($b)?) $op Wrapping(self.load($c)?)).0 % MAX_VALUE;
                 self.set($a, __result)?;
             }
         }
 
         macro_rules! halt {
             () => {
-                return Ok(false)
-            }
+                return Ok(false);
+            };
         }
 
-        match self.memory[self.pc] {
+        let opcode = self.memory[self.pc];
+        self.pc += 1;
+
+        match opcode {
             // halt: 0
             //   stop execution and terminate the program
-            0 => { halt!() },
+            0 => halt!(),
 
             // set: 1 a b
             //   set register <a> to the value of <b>
@@ -137,9 +266,12 @@ impl VM {
                 if let Some(tos) = self.stack.pop() {
                     self.set(a, tos)?;
                 } else {
-                    return Err(format!("Tried to pop from an empty stack (at location 0x{:x})", self.pc));
+                    return Err(format!(
+                        "Tried to pop from an empty stack (at location 0x{:x})",
+                        self.pc - 1
+                    ));
                 }
-            },
+            }
 
             // eq: 4 a b c
             //   set <a> to 1 if <b> is equal to <c>; set it to 0 otherwise
@@ -166,7 +298,7 @@ impl VM {
             6 => {
                 let a = self.next_argument();
                 jmp!(a);
-            },
+            }
 
             // jt: 7 a b
             //   if <a> is nonzero, jump to <b>
@@ -192,14 +324,14 @@ impl VM {
 
             // add: 9 a b c
             //   assign into <a> the sum of <b> and <c> (modulo 32768)
-            9 => { 
+            9 => {
                 let a = self.next_argument();
                 let b = self.next_argument();
                 let c = self.next_argument();
 
                 let result = (self.load(b)? + self.load(c)?) % MAX_VALUE;
                 self.set(a, result)?;
-            },
+            }
 
             // mult: 10 a b c
             //   store into <a> the product of <b> and <c> (modulo 32768)
@@ -210,7 +342,7 @@ impl VM {
 
                 // XXX: Does this want Rust-style remainder or C-style modulus?
                 binary_operation!(a = b * c);
-            },
+            }
 
             // mod: 11 a b c
             //   store into <a> the remainder of <b> divided by <c>
@@ -221,7 +353,7 @@ impl VM {
 
                 // XXX: Does this want Rust-style remainder or C-style modulus?
                 binary_operation!(a = b % c);
-            },
+            }
 
             // and: 12 a b c
             //   stores into <a> the bitwise and of <b> and <c>
@@ -231,7 +363,7 @@ impl VM {
                 let c = self.next_argument();
 
                 binary_operation!(a = b & c);
-            },
+            }
 
             // or: 13 a b c
             //   stores into <a> the bitwise or of <b> and <c>
@@ -241,7 +373,7 @@ impl VM {
                 let c = self.next_argument();
 
                 binary_operation!(a = b | c);
-            },
+            }
 
             // not: 14 a b
             //   stores 15-bit bitwise inverse of <b> in <a>
@@ -262,7 +394,7 @@ impl VM {
 
                 let memory_value = self.memory[self.load(b)? as usize];
                 self.set(a, memory_value)?;
-            },
+            }
 
             // wmem: 16 a b
             //   write the value from <b> into memory at address <a>
@@ -273,15 +405,15 @@ impl VM {
                 let memory_location = self.load(a)? as usize;
                 let b_value = self.load(b)?;
                 self.memory[memory_location] = b_value;
-            },
+            }
 
             // call: 17 a
             //   write the address of the next instruction to the stack and jump to <a>
             17 => {
                 let a = self.next_argument();
-                self.stack.push((self.pc + 1) as u16);
+                self.stack.push(self.pc as u16);
                 jmp!(a);
-            },
+            }
 
             // ret: 18
             //   remove the top element from the stack and jump to it; empty stack = halt
@@ -291,7 +423,7 @@ impl VM {
                 } else {
                     halt!();
                 }
-            },
+            }
 
             // out: 19 a
             //   write the character represented by ascii code <a> to the terminal
@@ -299,7 +431,7 @@ impl VM {
                 let a = self.next_argument();
 
                 print!("{}", self.load(a)? as u8 as char);
-            },
+            }
 
             // in: 20 a
             //   read a character from the terminal and write its ascii code to <a>; it can be assumed that once input starts, it will continue until a newline is encountered; this means that you can safely read whole lines from the keyboard and trust that they will be fully read
@@ -312,28 +444,25 @@ impl VM {
                 match handle.read_exact(&mut char_buf) {
                     Ok(()) => {
                         self.set(a, char_buf[0] as u16)?;
-                    },
+                    }
 
                     Err(_) => {
                         halt!();
-                    },
+                    }
                 }
-            },
+            }
 
             // noop: 21
             //   no operation
-            21 => { /* do nothing */ },
+            21 => { /* do nothing */ }
 
             unknown_opcode => {
                 return Err(format!(
                     "Unknown opcode {} (at location 0x{:x})",
-                    unknown_opcode, self.pc
+                    unknown_opcode,
+                    self.pc - 1
                 ))
             }
-        }
-
-        if should_increment_pc {
-            self.pc += 1;
         }
 
         Ok(true)
