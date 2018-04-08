@@ -61,7 +61,7 @@ impl VM {
     }
 
     pub fn cycle(&mut self) -> Result<bool, String> {
-        let should_increment_pc = true;
+        let mut should_increment_pc = true;
 
         macro_rules! unknown_opcode {
             ($opcode: expr) => {
@@ -96,7 +96,11 @@ impl VM {
 
             // jmp: 6 a
             //   jump to <a>
-            6 => { unknown_opcode!(6); },
+            6 => {
+                let a = self.next_argument();
+                self.pc = a;
+                should_increment_pc = false;
+            },
 
             // jt: 7 a b
             //   if <a> is nonzero, jump to <b>
