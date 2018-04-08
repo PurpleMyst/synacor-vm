@@ -112,7 +112,17 @@ impl VM {
 
             // eq: 4 a b c
             //   set <a> to 1 if <b> is equal to <c>; set it to 0 otherwise
-            4 => { unknown_opcode!(4); },
+            4 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+                let c = self.next_argument();
+
+                if self.load(b)? == self.load(c)? {
+                    self.set(a, 1)?;
+                } else {
+                    self.set(a, 0)?;
+                }
+            }
 
             // gt: 5 a b c
             //   set <a> to 1 if <b> is greater than <c>; set it to 0 otherwise
