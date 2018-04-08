@@ -108,10 +108,16 @@ impl VM {
             }
         }
 
+        macro_rules! halt {
+            () => {
+                return Ok(false)
+            }
+        }
+
         match self.memory[self.pc] {
             // halt: 0
             //   stop execution and terminate the program
-            0 => { return Ok(false) },
+            0 => { halt!() },
 
             // set: 1 a b
             //   set register <a> to the value of <b>
