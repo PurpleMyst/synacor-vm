@@ -61,13 +61,13 @@ impl VM {
         }
     }
 
-    pub fn cycle(&mut self) -> Result<(), String> {
+    pub fn cycle(&mut self) -> Result<bool, String> {
         let should_increment_pc = true;
 
         match self.memory[self.pc] {
             // halt: 0
             //   stop execution and terminate the program
-            0 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 0, self.pc))},
+            0 => { return Ok(false) },
 
             // set: 1 a b
             //   set register <a> to the value of <b>
@@ -143,7 +143,11 @@ impl VM {
 
             // out: 19 a
             //   write the character represented by ascii code <a> to the terminal
-            19 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 19, self.pc))},
+            19 => {
+                let a = self.next_argument();
+
+                print!("{}", self.load(a)? as u8 as char);
+            },
 
             // in: 20 a
             //   read a character from the terminal and write its ascii code to <a>; it can be assumed that once input starts, it will continue until a newline is encountered; this means that you can safely read whole lines from the keyboard and trust that they will be fully read
@@ -151,7 +155,7 @@ impl VM {
 
             // noop: 21
             //   no operation
-            21 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 21, self.pc))},
+            21 => { /* do nothing */ },
 
             unknown_opcode => {
                 return Err(format!(
@@ -165,6 +169,6 @@ impl VM {
             self.pc += 1;
         }
 
-        Ok(())
+        Ok(true)
     }
 }
