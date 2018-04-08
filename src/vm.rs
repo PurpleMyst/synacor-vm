@@ -34,7 +34,8 @@ impl VM {
             let low = chunk[0];
             let high = chunk[1];
 
-            self.memory[index] = u16::from_le(((low as u16) << 8) | (high as u16));
+            self.memory[index] = ((high as u16) << 8) | (low as u16);
+            if index == 0 { println!("{} {}", low, high); }
             index += 1;
         });
 
