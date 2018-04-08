@@ -24,7 +24,7 @@ impl Serialize for VM {
 
         macro_rules! u16slice_to_vec {
             (self. $name:ident) => {
-                &self.$name.iter().map(|x| *x).collect::<Vec<u16>>()
+                &self.$name.iter().cloned().collect::<Vec<u16>>()
             };
         }
 
@@ -45,7 +45,7 @@ impl<'de> Deserialize<'de> for VM {
         };
 
         impl<'de> Deserialize<'de> for VMField {
-            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<VMField, D::Error> {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 struct ValueVisitor;
 
                 impl<'de> Visitor<'de> for ValueVisitor {
@@ -55,11 +55,11 @@ impl<'de> Deserialize<'de> for VM {
                         formatter.write_str("stuff")
                     }
 
-                    fn visit_u64<E: de::Error>(self, value: u64) -> Result<VMField, E> {
+                    fn visit_u64<E: de::Error>(self, value: u64) -> Result<Self::Value, E> {
                         Ok(VMField::USize(value as usize))
                     }
 
-                    fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<VMField, V::Error> {
+                    fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<Self::Value, V::Error> {
                         let mut result = Vec::new();
                         while let Some(element) = seq.next_element()? {
                             result.push(element);
@@ -81,7 +81,7 @@ impl<'de> Deserialize<'de> for VM {
                 formatter.write_str("struct VM")
             }
 
-            fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<VM, V::Error> {
+            fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<Self::Value, V::Error> {
                 macro_rules! next_element {
                     ($index:expr) => {
                         seq.next_element()?
@@ -108,7 +108,7 @@ impl<'de> Deserialize<'de> for VM {
                 })
             }
 
-            fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<VM, V::Error> {
+            fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<Self::Value, V::Error> {
                 let mut memory = [0; ADDRESS_SPACE];
                 let mut registers = [0; REGISTER_COUNT];
                 let mut stack: Option<Stack<u16>> = None;
@@ -118,7 +118,7 @@ impl<'de> Deserialize<'de> for VM {
                     match (key, value) {
                         ("memory", VMField::U16Array(slice)) => memory.copy_from_slice(&slice),
                         ("registers", VMField::U16Array(slice)) => registers.copy_from_slice(&slice),
-                        ("stack", VMField::U16Array(slice)) => stack = Some(Stack::from(slice)),
+                        ("stack", VMField::U16Array(slice)) => stack = Some(slice),
                         ("pc", VMField::USize(value)) => pc = Some(value),
                         _ => return Err(de::Error::custom("invalid key/value combination"))
                     }
@@ -155,7 +155,7 @@ impl VM {
             let low = chunk[0];
             let high = chunk[1];
 
-            self.memory[index] = ((high as u16) << 8) | (low as u16);
+            self.memory[index] = ((u16::from(high)) << 8) | (u16::from(low));
             index += 1;
         });
 
@@ -441,14 +441,10 @@ impl VM {
                 let mut char_buf = [0];
                 let stdin = io::stdin();
                 let mut handle = stdin.lock();
-                match handle.read_exact(&mut char_buf) {
-                    Ok(()) => {
-                        self.set(a, char_buf[0] as u16)?;
-                    }
-
-                    Err(_) => {
-                        halt!();
-                    }
+                if let Ok(()) = handle.read_exact(&mut char_buf) {
+                    self.set(a, u16::from(char_buf[0]))?;
+                } else {
+                    halt!();
                 }
             }
 
