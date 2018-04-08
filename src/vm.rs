@@ -76,12 +76,6 @@ impl VM {
     pub fn cycle(&mut self) -> Result<bool, String> {
         let mut should_increment_pc = true;
 
-        macro_rules! unknown_opcode {
-            ($opcode: expr) => {
-                return Err(format!("Un-implemented opcode {} (at location 0x{:x})", $opcode, self.pc))
-            }
-        }
-
         macro_rules! jmp {
             ($location: expr) => {
                 self.pc = self.load($location)? as usize;
