@@ -57,12 +57,18 @@ impl VM {
         } else if address <= 32775 {
             Ok(self.registers[(address - 32767) as usize])
         } else {
-            Err(format!("Tried to load invalid address {} (at location {:x})", address, self.pc))
+            Err(format!("Tried to load invalid address {} (at location 0x{:x})", address, self.pc))
         }
     }
 
     pub fn cycle(&mut self) -> Result<bool, String> {
         let should_increment_pc = true;
+
+        macro_rules! unknown_opcode {
+            ($opcode: expr) => {
+                return Err(format!("Un-implemented opcode {} (at location 0x{:x})", $opcode, self.pc))
+            }
+        }
 
         match self.memory[self.pc] {
             // halt: 0
@@ -71,75 +77,75 @@ impl VM {
 
             // set: 1 a b
             //   set register <a> to the value of <b>
-            1 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 1, self.pc))},
+            1 => { unknown_opcode!(1); },
 
             // push: 2 a
             //   push <a> onto the stack
-            2 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 2, self.pc))},
+            2 => { unknown_opcode!(2); },
 
             // pop: 3 a
             //   remove the top element from the stack and write it into <a>; empty stack = error
-            3 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 3, self.pc))},
+            3 => { unknown_opcode!(3); },
 
             // eq: 4 a b c
             //   set <a> to 1 if <b> is equal to <c>; set it to 0 otherwise
-            4 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 4, self.pc))},
+            4 => { unknown_opcode!(4); },
 
             // gt: 5 a b c
             //   set <a> to 1 if <b> is greater than <c>; set it to 0 otherwise
-            5 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 5, self.pc))},
+            5 => { unknown_opcode!(5); },
 
             // jmp: 6 a
             //   jump to <a>
-            6 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 6, self.pc))},
+            6 => { unknown_opcode!(6); },
 
             // jt: 7 a b
             //   if <a> is nonzero, jump to <b>
-            7 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 7, self.pc))},
+            7 => { unknown_opcode!(7); },
 
             // jf: 8 a b
             //   if <a> is zero, jump to <b>
-            8 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 8, self.pc))},
+            8 => { unknown_opcode!(8); },
 
             // add: 9 a b c
             //   assign into <a> the sum of <b> and <c> (modulo 32768)
-            9 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 9, self.pc))},
+            9 => { unknown_opcode!(9); },
 
             // mult: 10 a b c
             //   store into <a> the product of <b> and <c> (modulo 32768)
-            10 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 10, self.pc))},
+            10 => { unknown_opcode!(10); },
 
             // mod: 11 a b c
             //   store into <a> the remainder of <b> divided by <c>
-            11 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 11, self.pc))},
+            11 => { unknown_opcode!(11); },
 
             // and: 12 a b c
             //   stores into <a> the bitwise and of <b> and <c>
-            12 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 12, self.pc))},
+            12 => { unknown_opcode!(12); },
 
             // or: 13 a b c
             //   stores into <a> the bitwise or of <b> and <c>
-            13 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 13, self.pc))},
+            13 => { unknown_opcode!(13); },
 
             // not: 14 a b
             //   stores 15-bit bitwise inverse of <b> in <a>
-            14 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 14, self.pc))},
+            14 => { unknown_opcode!(14); },
 
             // rmem: 15 a b
             //   read memory at address <b> and write it to <a>
-            15 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 15, self.pc))},
+            15 => { unknown_opcode!(15); },
 
             // wmem: 16 a b
             //   write the value from <b> into memory at address <a>
-            16 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 16, self.pc))},
+            16 => { unknown_opcode!(16); },
 
             // call: 17 a
             //   write the address of the next instruction to the stack and jump to <a>
-            17 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 17, self.pc))},
+            17 => { unknown_opcode!(17); },
 
             // ret: 18
             //   remove the top element from the stack and jump to it; empty stack = halt
-            18 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 18, self.pc))},
+            18 => { unknown_opcode!(18); },
 
             // out: 19 a
             //   write the character represented by ascii code <a> to the terminal
@@ -151,7 +157,7 @@ impl VM {
 
             // in: 20 a
             //   read a character from the terminal and write its ascii code to <a>; it can be assumed that once input starts, it will continue until a newline is encountered; this means that you can safely read whole lines from the keyboard and trust that they will be fully read
-            20 => { return Err(format!("Un-implemented opcode {} (at location {:x})", 20, self.pc))},
+            20 => { unknown_opcode!(20) },
 
             // noop: 21
             //   no operation
@@ -159,7 +165,7 @@ impl VM {
 
             unknown_opcode => {
                 return Err(format!(
-                    "Unknown opcode {} (at memory location {:x})",
+                    "Unknown opcode {} (at location 0x{:x})",
                     unknown_opcode, self.pc
                 ))
             }
