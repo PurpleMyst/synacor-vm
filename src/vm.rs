@@ -28,12 +28,14 @@ impl VM {
     }
 
     pub fn load_program_from_file(&mut self, path: &str) -> io::Result<()> {
-        fs::read(path)?.exact_chunks(2).for_each(|chunk| {
-            let low: u8 = chunk[0];
-            let high: u8 = chunk[1];
+        let mut index = 0;
 
-            self.memory[self.pc] = u16::from_le(((low as u16) << 8) | (high as u16));
-            self.pc += 1;
+        fs::read(path)?.exact_chunks(2).for_each(|chunk| {
+            let low = chunk[0];
+            let high = chunk[1];
+
+            self.memory[index] = u16::from_le(((low as u16) << 8) | (high as u16));
+            index += 1;
         });
 
         Ok(())
