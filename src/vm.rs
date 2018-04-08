@@ -84,7 +84,7 @@ impl VM {
 
         macro_rules! jmp {
             ($location: expr) => {
-                self.pc = ($location) as usize;
+                self.pc = self.load($location)? as usize;
                 should_increment_pc = false;
             }
         }
