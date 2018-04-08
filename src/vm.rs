@@ -114,11 +114,23 @@ impl VM {
 
             // push: 2 a
             //   push <a> onto the stack
-            2 => { unknown_opcode!(2); },
+            2 => {
+                let a = self.next_argument();
+                let a_value = self.load(a)?;
+                self.stack.push(a_value);
+            }
 
             // pop: 3 a
             //   remove the top element from the stack and write it into <a>; empty stack = error
-            3 => { unknown_opcode!(3); },
+            3 => {
+                let a = self.next_argument();
+
+                if let Some(tos) = self.stack.pop() {
+                    self.set(a, tos)?;
+                } else {
+                    return Err(format!("Tried to pop from an empty stack (at location 0x{:x})", self.pc));
+                }
+            },
 
             // eq: 4 a b c
             //   set <a> to 1 if <b> is equal to <c>; set it to 0 otherwise
