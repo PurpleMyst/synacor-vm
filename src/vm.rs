@@ -264,7 +264,11 @@ impl VM {
 
             // call: 17 a
             //   write the address of the next instruction to the stack and jump to <a>
-            17 => { unknown_opcode!(17); },
+            17 => {
+                let a = self.next_argument();
+                self.stack.push((self.pc + 1) as u16);
+                jmp!(a);
+            },
 
             // ret: 18
             //   remove the top element from the stack and jump to it; empty stack = halt
