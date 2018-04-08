@@ -1,4 +1,4 @@
-use std::{fs, io, num::Wrapping};
+use std::{fs, io::{self, Read}, num::Wrapping};
 
 const INTEGER_SIZE: usize = 15;
 const MAX_VALUE: u16 = 1 << INTEGER_SIZE;
@@ -290,7 +290,22 @@ impl VM {
 
             // in: 20 a
             //   read a character from the terminal and write its ascii code to <a>; it can be assumed that once input starts, it will continue until a newline is encountered; this means that you can safely read whole lines from the keyboard and trust that they will be fully read
-            20 => { unknown_opcode!(20) },
+            20 => {
+                let a = self.next_argument();
+
+                let mut char_buf = [0];
+                let stdin = io::stdin();
+                let mut handle = stdin.lock();
+                match handle.read_exact(&mut char_buf) {
+                    Ok(()) => {
+                        self.set(a, char_buf[0] as u16)?;
+                    },
+
+                    Err(_) => {
+                        halt!();
+                    },
+                }
+            },
 
             // noop: 21
             //   no operation
