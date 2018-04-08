@@ -1,4 +1,4 @@
-use std::{fs, io};
+use std::{fs, io, num::Wrapping};
 
 const INTEGER_SIZE: usize = 15;
 const MAX_VALUE: u16 = 1 << INTEGER_SIZE;
@@ -101,7 +101,9 @@ impl VM {
 
         macro_rules! binary_operation {
             ($a:ident = $b:ident $op:tt $c:ident) => {
-                let __result = (self.load($b)? $op self.load($c)?) % MAX_VALUE;
+                // XXX: I don't exactly like creating a new `Wrapping` every time. Maybe I should
+                // utilize `wrapped_{add, mul, ...}` instead.
+                let __result = (Wrapping(self.load($b)?) $op Wrapping(self.load($c)?)).0 % MAX_VALUE;
                 self.set($a, __result)?;
             }
         }
