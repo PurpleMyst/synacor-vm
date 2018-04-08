@@ -132,7 +132,13 @@ impl VM {
 
             // gt: 5 a b c
             //   set <a> to 1 if <b> is greater than <c>; set it to 0 otherwise
-            5 => { unknown_opcode!(5); },
+            5 => {
+                let a = self.next_argument();
+                let b = self.next_argument();
+                let c = self.next_argument();
+
+                bool_operation!(a = b > c);
+            }
 
             // jmp: 6 a
             //   jump to <a>
