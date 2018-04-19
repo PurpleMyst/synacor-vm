@@ -222,8 +222,10 @@ impl VM {
             ($a:ident = $b:ident $op:tt $c:ident) => {
                 // XXX: I don't exactly like creating a new `Wrapping` every time. Maybe I should
                 // utilize `wrapped_{add, mul, ...}` instead.
+                let __b_value = self.load($b)?;
+                let __c_value = self.load($c)?;
                 let __result =
-                    (Wrapping(self.load($b)?) $op Wrapping(self.load($c)?)).0 % MAX_VALUE;
+                    (Wrapping(__b_value) $op Wrapping(__c_value)).0 % MAX_VALUE;
                 self.set($a, __result)?;
             }
         }
@@ -329,8 +331,7 @@ impl VM {
                 let b = self.next_argument();
                 let c = self.next_argument();
 
-                let result = (self.load(b)? + self.load(c)?) % MAX_VALUE;
-                self.set(a, result)?;
+                binary_operation!(a = b + c);
             }
 
             // mult: 10 a b c
@@ -340,7 +341,6 @@ impl VM {
                 let b = self.next_argument();
                 let c = self.next_argument();
 
-                // XXX: Does this want Rust-style remainder or C-style modulus?
                 binary_operation!(a = b * c);
             }
 
