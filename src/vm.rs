@@ -82,17 +82,19 @@ impl<'de> Deserialize<'de> for VM {
             }
 
             fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<Self::Value, V::Error> {
-                macro_rules! next_element {
-                    ($index:expr) => {
-                        seq.next_element()?
-                            .ok_or_else(|| de::Error::invalid_length($index, &self))?;
-                    };
+                macro_rules! elements {
+                    ($($name:ident : $ty:ty),*) => {
+                        $(
+                        let $name: $ty = seq.next_element()?
+                                            .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+                        )*
+                    }
                 }
 
-                let memory_values: Vec<u16> = next_element!(0);
-                let registers_values: Vec<u16> = next_element!(1);
-                let stack: Stack<u16> = next_element!(2);
-                let pc: usize = next_element!(3);
+                elements!(memory_values: Vec<u16>,
+                          registers_values: Vec<u16>,
+                          stack: Stack<u16>,
+                          pc: usize);
 
                 let mut memory = [0; ADDRESS_SPACE];
                 memory.copy_from_slice(&memory_values);
