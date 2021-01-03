@@ -337,11 +337,19 @@ impl VM {
                 let a = self.next_argument();
 
                 let mut ch = 0;
-                if let Ok(()) = io::stdin().read_exact(std::slice::from_mut(&mut ch)) {
-                    self.set(a, u32::from(ch))?;
-                } else {
-                    halt!();
+
+                loop {
+                    if let Err(..) = io::stdin().read_exact(std::slice::from_mut(&mut ch)) {
+                        halt!();
+                    }
+
+                    // Skip over the CR in windows' line ending
+                    if ch != b'\r' {
+                        break;
+                    }
                 }
+
+                self.set(a, u32::from(ch))?;
             }
 
             // noop: 21
