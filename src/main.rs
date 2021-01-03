@@ -1,14 +1,13 @@
 use std::{env, fs};
 
 mod vm;
+use vm::VM;
 
-fn main() {
+fn main() -> vm::Result<()> {
     let mut vm = if let Some(snapshot) = env::args().nth(1) {
-        rmp_serde::from_read(fs::File::open(snapshot).unwrap()).unwrap()
+        VM::load_snapshot(fs::File::open(snapshot)?)?
     } else {
-        let mut vm = vm::VM::new();
-        vm.load_program_from_file("challenge.bin").unwrap();
-        vm
+        VM::load_program(include_bytes!("challenge.bin"))
     };
 
     loop {
@@ -24,5 +23,5 @@ fn main() {
         }
     }
 
-    rmp_serde::encode::write_named(&mut fs::File::create("snapshot.mp").unwrap(), &vm).unwrap()
+    vm.save_snapshot(fs::File::create("snapshot.bin")?)
 }

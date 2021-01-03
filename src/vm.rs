@@ -1,7 +1,7 @@
 use std::{
     convert::TryInto,
-    fs,
     io::{self, Read},
+    mem::size_of,
 };
 
 const INTEGER_SIZE: usize = 15;
@@ -11,16 +11,9 @@ const REGISTER_COUNT: usize = 8;
 
 pub type Stack<T> = Vec<T>;
 
-serde_big_array::big_array! {
-    BigArray; ADDRESS_SPACE, REGISTER_COUNT
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
 pub struct VM {
-    #[serde(with = "BigArray")]
     pub memory: [u32; ADDRESS_SPACE],
 
-    #[serde(with = "BigArray")]
     pub registers: [u32; REGISTER_COUNT],
 
     pub stack: Stack<u32>,
@@ -52,25 +45,66 @@ pub enum Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl VM {
-    pub fn new() -> Self {
-        Self {
+    pub fn load_program(program: &'static [u8]) -> Self {
+        let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
             stack: Stack::new(),
-
             pc: 0,
-        }
-    }
+        };
 
-    pub fn load_program_from_file(&mut self, path: &str) -> Result<()> {
-        fs::read(path)?
+        program
             .chunks_exact(2)
-            .zip(self.memory.iter_mut())
+            .zip(this.memory.iter_mut())
             .for_each(|(chunk, cell)| {
                 *cell = u32::from(u16::from_le_bytes(chunk.try_into().unwrap()));
             });
 
+        this
+    }
+
+    pub fn save_snapshot(&self, mut w: impl io::Write) -> Result<()> {
+        // memory: [u32; ADDRESS_SPACE]
+        w.write_all(bytemuck::cast_slice(&self.memory))?;
+
+        // registers: [u32; REGISTER_COUNT]
+        w.write_all(bytemuck::cast_slice(&self.registers))?;
+
+        // pc: usize,
+        w.write_all(&self.pc.to_ne_bytes())?;
+
+        // stack: Stack<u32>
+        w.write_all(bytemuck::cast_slice(&self.stack))?;
+
         Ok(())
+    }
+
+    pub fn load_snapshot(mut r: impl io::Read) -> Result<Self> {
+        let mut this = Self {
+            memory: [0; ADDRESS_SPACE],
+            registers: [0; REGISTER_COUNT],
+            stack: Stack::new(),
+            pc: 0,
+        };
+
+        // memory: [u32; ADDRESS_SPACE]
+        r.read_exact(bytemuck::cast_slice_mut(&mut this.memory))?;
+
+        // registers: [u32; REGISTER_COUNT]
+        r.read_exact(bytemuck::cast_slice_mut(&mut this.registers))?;
+
+        // pc: usize,
+        let mut pc_bytes = [0; size_of::<usize>()];
+        r.read_exact(&mut pc_bytes)?;
+        this.pc = usize::from_ne_bytes(pc_bytes);
+
+        // stack: Stack<u32>
+        let mut tos_bytes = [0; size_of::<u32>()];
+        while let Ok(()) = r.read_exact(&mut tos_bytes) {
+            this.stack.push(u32::from_ne_bytes(tos_bytes));
+        }
+
+        Ok(this)
     }
 
     fn next_argument(&mut self) -> u32 {
@@ -106,6 +140,17 @@ impl VM {
     }
 
     pub fn cycle(&mut self) -> Result<()> {
+        let prev_pc = self.pc;
+        match self.do_cycle() {
+            Ok(()) => Ok(()),
+            err @ Err(..) => {
+                self.pc = prev_pc;
+                err
+            }
+        }
+    }
+
+    fn do_cycle(&mut self) -> Result<()> {
         macro_rules! jmp {
             ($location:expr) => {
                 self.pc = self.load($location)? as usize;

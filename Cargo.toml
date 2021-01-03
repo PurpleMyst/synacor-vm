@@ -5,7 +5,5 @@ authors = ["Purple Myst <PurpleMyst@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde-big-array = "0.3.1"
 thiserror = "1.0.23"
-rmp-serde = "0.15.0"
+bytemuck = "1.4.1"
