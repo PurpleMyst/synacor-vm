@@ -1,4 +1,5 @@
 use std::{
+    convert::TryInto,
     fs,
     io::{self, Read},
     num::Wrapping,
@@ -40,20 +41,16 @@ impl VM {
     }
 
     pub fn load_program_from_file(&mut self, path: &str) -> io::Result<()> {
-        let mut index = 0;
-
-        fs::read(path)?.chunks_exact(2).for_each(|chunk| {
-            let low = chunk[0];
-            let high = chunk[1];
-
-            self.memory[index] = ((u16::from(high)) << 8) | (u16::from(low));
-            index += 1;
-        });
+        fs::read(path)?
+            .chunks_exact(2)
+            .zip(self.memory.iter_mut())
+            .for_each(|(chunk, cell)| {
+                *cell = u16::from_le_bytes(chunk.try_into().unwrap());
+            });
 
         Ok(())
     }
 
-    #[inline(always)]
     fn next_argument(&mut self) -> u16 {
         let value = self.memory[self.pc];
         self.pc += 1;
@@ -111,13 +108,12 @@ impl VM {
 
         macro_rules! binary_operation {
             ($a:ident = $b:ident $op:tt $c:ident) => {
-                // XXX: I don't exactly like creating a new `Wrapping` every time. Maybe I should
-                // utilize `wrapped_{add, mul, ...}` instead.
-                let __b_value = self.load($b)?;
-                let __c_value = self.load($c)?;
-                let __result =
-                    (Wrapping(__b_value) $op Wrapping(__c_value)).0 % MAX_VALUE;
-                self.set($a, __result)?;
+                // XXX: I'm dubious about the validity of this.. double-mod situation
+                let b = self.load($b)?;
+                let c = self.load($c)?;
+                let result =
+                    (Wrapping(b) $op Wrapping(c)).0 % MAX_VALUE;
+                self.set($a, result)?;
             }
         }
 
