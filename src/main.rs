@@ -1,20 +1,33 @@
-use std::{env, fs};
+use std::{env, fs, io};
 
-mod vm;
-use vm::VM;
+use synacor_vm::VM;
 
-fn main() -> vm::Result<()> {
+#[allow(clippy::unnecessary_wraps)]
+fn print_ch(ch: u8) -> synacor_vm::Result<()> {
+    print!("{}", ch as char);
+    Ok(())
+}
+
+fn main() -> synacor_vm::Result<()> {
     let mut vm = if let Some(snapshot) = env::args().nth(1) {
-        VM::load_snapshot(fs::File::open(snapshot)?)?
+        VM::load_snapshot(
+            Box::new(io::stdin()),
+            Box::new(print_ch),
+            fs::File::open(snapshot)?,
+        )?
     } else {
-        VM::load_program(include_bytes!("challenge.bin"))
+        VM::load_program(
+            Box::new(io::stdin()),
+            Box::new(print_ch),
+            include_bytes!("challenge.bin"),
+        )
     };
 
     loop {
         match vm.cycle() {
             Ok(()) => {}
 
-            Err(vm::Error::Halt) => break,
+            Err(synacor_vm::Error::Halt) => break,
 
             Err(err) => {
                 eprintln!("error after location {:#x}: {}", vm.pc, err);

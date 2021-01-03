@@ -19,6 +19,9 @@ pub struct VM {
     pub stack: Stack<u32>,
 
     pub pc: usize,
+
+    pub input: Box<dyn io::Read>,
+    pub output: Box<dyn FnMut(u8) -> Result<()>>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -45,12 +48,18 @@ pub enum Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl VM {
-    pub fn load_program(program: &'static [u8]) -> Self {
+    pub fn load_program(
+        input: Box<dyn io::Read>,
+        output: Box<dyn FnMut(u8) -> Result<()>>,
+        program: &'static [u8],
+    ) -> Self {
         let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
             stack: Stack::new(),
             pc: 0,
+            input,
+            output,
         };
 
         program
@@ -79,12 +88,18 @@ impl VM {
         Ok(())
     }
 
-    pub fn load_snapshot(mut r: impl io::Read) -> Result<Self> {
+    pub fn load_snapshot(
+        input: Box<dyn io::Read>,
+        output: Box<dyn FnMut(u8) -> Result<()>>,
+        mut r: impl io::Read,
+    ) -> Result<Self> {
         let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
             stack: Stack::new(),
             pc: 0,
+            input,
+            output,
         };
 
         // memory: [u32; ADDRESS_SPACE]
@@ -373,7 +388,8 @@ impl VM {
             19 => {
                 let a = self.next_argument();
 
-                print!("{}", self.load(a)? as u8 as char);
+                let ch = self.load(a)? as u8;
+                (self.output)(ch)?;
             }
 
             // in: 20 a
@@ -384,7 +400,7 @@ impl VM {
                 let mut ch = 0;
 
                 loop {
-                    if let Err(..) = io::stdin().read_exact(std::slice::from_mut(&mut ch)) {
+                    if let Err(..) = self.input.read_exact(std::slice::from_mut(&mut ch)) {
                         halt!();
                     }
 
