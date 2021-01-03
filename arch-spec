@@ -27,7 +27,7 @@ your progress.  Good luck!
 
 == hints ==
 - Start with operations 0, 19, and 21.
-- Here's a code for the challenge website: JPgyIVDBWUOf
+- Here's a code for the challenge website: VofWFYnqhIju
 - The program "9,32768,32769,4,19,32768" occupies six memory addresses and should:
   - Store into register 0 the sum of 4 and the value contained in register 1.
   - Output to the terminal the character with the ascii code contained in register 0.
