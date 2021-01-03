@@ -1,5 +1,3 @@
-#![feature(exact_chunks)]
-
 use std::{env, fs};
 
 extern crate colored;

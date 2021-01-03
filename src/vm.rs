@@ -1,4 +1,8 @@
-use std::{fmt, fs, io::{self, Read}, num::Wrapping};
+use std::{
+    fmt, fs,
+    io::{self, Read},
+    num::Wrapping,
+};
 
 use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -59,7 +63,10 @@ impl<'de> Deserialize<'de> for VM {
                         Ok(VMField::USize(value as usize))
                     }
 
-                    fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<Self::Value, V::Error> {
+                    fn visit_seq<V: SeqAccess<'de>>(
+                        self,
+                        mut seq: V,
+                    ) -> Result<Self::Value, V::Error> {
                         let mut result = Vec::new();
                         while let Some(element) = seq.next_element()? {
                             result.push(element);
@@ -91,10 +98,12 @@ impl<'de> Deserialize<'de> for VM {
                     }
                 }
 
-                elements!(memory_values: Vec<u16>,
-                          registers_values: Vec<u16>,
-                          stack: Stack<u16>,
-                          pc: usize);
+                elements!(
+                    memory_values: Vec<u16>,
+                    registers_values: Vec<u16>,
+                    stack: Stack<u16>,
+                    pc: usize
+                );
 
                 let mut memory = [0; ADDRESS_SPACE];
                 memory.copy_from_slice(&memory_values);
@@ -119,10 +128,12 @@ impl<'de> Deserialize<'de> for VM {
                 while let Some((key, value)) = map.next_entry()? {
                     match (key, value) {
                         ("memory", VMField::U16Array(slice)) => memory.copy_from_slice(&slice),
-                        ("registers", VMField::U16Array(slice)) => registers.copy_from_slice(&slice),
+                        ("registers", VMField::U16Array(slice)) => {
+                            registers.copy_from_slice(&slice)
+                        }
                         ("stack", VMField::U16Array(slice)) => stack = Some(slice),
                         ("pc", VMField::USize(value)) => pc = Some(value),
-                        _ => return Err(de::Error::custom("invalid key/value combination"))
+                        _ => return Err(de::Error::custom("invalid key/value combination")),
                     }
                 }
 
@@ -153,7 +164,7 @@ impl VM {
     pub fn load_program_from_file(&mut self, path: &str) -> io::Result<()> {
         let mut index = 0;
 
-        fs::read(path)?.exact_chunks(2).for_each(|chunk| {
+        fs::read(path)?.chunks_exact(2).for_each(|chunk| {
             let low = chunk[0];
             let high = chunk[1];
 
