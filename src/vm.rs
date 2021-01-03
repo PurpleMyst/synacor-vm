@@ -2,11 +2,10 @@ use std::{
     convert::TryInto,
     fs,
     io::{self, Read},
-    num::Wrapping,
 };
 
 const INTEGER_SIZE: usize = 15;
-const MAX_VALUE: u16 = 1 << INTEGER_SIZE;
+const MAX_VALUE: u32 = 1 << INTEGER_SIZE;
 const ADDRESS_SPACE: usize = MAX_VALUE as usize;
 const REGISTER_COUNT: usize = 8;
 
@@ -19,12 +18,12 @@ serde_big_array::big_array! {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct VM {
     #[serde(with = "BigArray")]
-    memory: [u16; ADDRESS_SPACE],
+    memory: [u32; ADDRESS_SPACE],
 
     #[serde(with = "BigArray")]
-    registers: [u16; REGISTER_COUNT],
+    registers: [u32; REGISTER_COUNT],
 
-    stack: Stack<u16>,
+    stack: Stack<u32>,
 
     pc: usize,
 }
@@ -45,19 +44,19 @@ impl VM {
             .chunks_exact(2)
             .zip(self.memory.iter_mut())
             .for_each(|(chunk, cell)| {
-                *cell = u16::from_le_bytes(chunk.try_into().unwrap());
+                *cell = u32::from_le_bytes(chunk.try_into().unwrap());
             });
 
         Ok(())
     }
 
-    fn next_argument(&mut self) -> u16 {
+    fn next_argument(&mut self) -> u32 {
         let value = self.memory[self.pc];
         self.pc += 1;
         value
     }
 
-    fn load(&self, address: u16) -> Result<u16, String> {
+    fn load(&self, address: u32) -> Result<u32, String> {
         // - numbers 0..32767 mean a literal value
         // - numbers 32768..32775 instead mean registers 0..7
         // - numbers 32776..65535 are invalid
@@ -73,7 +72,7 @@ impl VM {
         }
     }
 
-    fn set(&mut self, destination_address: u16, source_address: u16) -> Result<(), String> {
+    fn set(&mut self, destination_address: u32, source_address: u32) -> Result<(), String> {
         let source = self.load(source_address)?;
 
         let destination = if (32768..=32775).contains(&destination_address) {
@@ -108,11 +107,9 @@ impl VM {
 
         macro_rules! binary_operation {
             ($a:ident = $b:ident $op:tt $c:ident) => {
-                // XXX: I'm dubious about the validity of this.. double-mod situation
                 let b = self.load($b)?;
                 let c = self.load($c)?;
-                let result =
-                    (Wrapping(b) $op Wrapping(c)).0 % MAX_VALUE;
+                let result = (b $op c) % MAX_VALUE;
                 self.set($a, result)?;
             }
         }
@@ -298,7 +295,7 @@ impl VM {
             //   write the address of the next instruction to the stack and jump to <a>
             17 => {
                 let a = self.next_argument();
-                self.stack.push(self.pc as u16);
+                self.stack.push(self.pc as u32);
                 jmp!(a);
             }
 
@@ -329,7 +326,7 @@ impl VM {
                 let stdin = io::stdin();
                 let mut handle = stdin.lock();
                 if let Ok(()) = handle.read_exact(&mut char_buf) {
-                    self.set(a, u16::from(char_buf[0]))?;
+                    self.set(a, u32::from(char_buf[0]))?;
                 } else {
                     halt!();
                 }
