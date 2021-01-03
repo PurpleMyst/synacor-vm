@@ -1,6 +1,6 @@
 use std::{
     convert::TryInto,
-    io::{self, Read},
+    io::{self, Read, Write},
     mem::size_of,
 };
 
@@ -11,7 +11,7 @@ const REGISTER_COUNT: usize = 8;
 
 pub type Stack<T> = Vec<T>;
 
-pub struct VM {
+pub struct VM<Input: Read, Output: Write> {
     pub memory: [u32; ADDRESS_SPACE],
 
     pub registers: [u32; REGISTER_COUNT],
@@ -20,8 +20,8 @@ pub struct VM {
 
     pub pc: usize,
 
-    pub input: Box<dyn io::Read>,
-    pub output: Box<dyn FnMut(u8) -> Result<()>>,
+    pub input: Input,
+    pub output: Output,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -47,12 +47,8 @@ pub enum Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-impl VM {
-    pub fn load_program(
-        input: Box<dyn io::Read>,
-        output: Box<dyn FnMut(u8) -> Result<()>>,
-        program: &'static [u8],
-    ) -> Self {
+impl<Input: Read, Output: Write> VM<Input, Output> {
+    pub fn load_program(input: Input, output: Output, program: &'static [u8]) -> Self {
         let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
@@ -88,11 +84,7 @@ impl VM {
         Ok(())
     }
 
-    pub fn load_snapshot(
-        input: Box<dyn io::Read>,
-        output: Box<dyn FnMut(u8) -> Result<()>>,
-        mut r: impl io::Read,
-    ) -> Result<Self> {
+    pub fn load_snapshot(input: Input, output: Output, mut r: impl io::Read) -> Result<Self> {
         let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
@@ -389,7 +381,7 @@ impl VM {
                 let a = self.next_argument();
 
                 let ch = self.load(a)? as u8;
-                (self.output)(ch)?;
+                self.output.write_all(std::slice::from_ref(&ch))?;
             }
 
             // in: 20 a
