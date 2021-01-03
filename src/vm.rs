@@ -201,7 +201,7 @@ impl VM {
     fn set(&mut self, destination_address: u16, source_address: u16) -> Result<(), String> {
         let source = self.load(source_address)?;
 
-        let destination = if destination_address >= 32768 && destination_address <= 32775 {
+        let destination = if (32768..=32775).contains(&destination_address) {
             &mut self.registers[(destination_address - 32768) as usize]
         } else {
             return Err(format!(
