@@ -1,7 +1,6 @@
 use std::{env, fs};
 
 extern crate colored;
-use colored::Colorize;
 
 extern crate serde;
 
@@ -20,12 +19,12 @@ fn main() {
 
     loop {
         match vm.cycle() {
-            Ok(true) => {}
+            Ok(()) => {}
 
-            Ok(false) => break,
+            Err(vm::Error::Halt) => break,
 
-            Err(msg) => {
-                eprintln!("{}", msg.red());
+            Err(err) => {
+                eprintln!("error after location {:#x}: {}", vm.pc, err);
                 break;
             }
         }

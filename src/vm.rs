@@ -18,15 +18,38 @@ serde_big_array::big_array! {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct VM {
     #[serde(with = "BigArray")]
-    memory: [u32; ADDRESS_SPACE],
+    pub memory: [u32; ADDRESS_SPACE],
 
     #[serde(with = "BigArray")]
-    registers: [u32; REGISTER_COUNT],
+    pub registers: [u32; REGISTER_COUNT],
 
-    stack: Stack<u32>,
+    pub stack: Stack<u32>,
 
-    pc: usize,
+    pub pc: usize,
 }
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("{0}")]
+    IOError(#[from] io::Error),
+
+    #[error("Tried to load invalid address {0:#x}")]
+    InvalidLoad(u32),
+
+    #[error("Tried to store at invalid address {0:#x}")]
+    InvalidStore(u32),
+
+    #[error("Tried to pop from an empty stack")]
+    PopFromEmptyStack,
+
+    #[error("Unknown opcode {0}")]
+    UnknownOpcode(u32),
+
+    #[error("Program halted")]
+    Halt,
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl VM {
     pub fn new() -> Self {
@@ -39,12 +62,12 @@ impl VM {
         }
     }
 
-    pub fn load_program_from_file(&mut self, path: &str) -> io::Result<()> {
+    pub fn load_program_from_file(&mut self, path: &str) -> Result<()> {
         fs::read(path)?
             .chunks_exact(2)
             .zip(self.memory.iter_mut())
             .for_each(|(chunk, cell)| {
-                *cell = u32::from_le_bytes(chunk.try_into().unwrap());
+                *cell = u32::from(u16::from_le_bytes(chunk.try_into().unwrap()));
             });
 
         Ok(())
@@ -56,7 +79,7 @@ impl VM {
         value
     }
 
-    fn load(&self, address: u32) -> Result<u32, String> {
+    fn load(&self, address: u32) -> Result<u32> {
         // - numbers 0..32767 mean a literal value
         // - numbers 32768..32775 instead mean registers 0..7
         // - numbers 32776..65535 are invalid
@@ -65,30 +88,24 @@ impl VM {
         } else if address <= 32775 {
             Ok(self.registers[(address - 32768) as usize])
         } else {
-            Err(format!(
-                "Tried to load invalid address {} (at location 0x{:x})",
-                address, self.pc
-            ))
+            Err(Error::InvalidLoad(address))
         }
     }
 
-    fn set(&mut self, destination_address: u32, source_address: u32) -> Result<(), String> {
-        let source = self.load(source_address)?;
+    fn set(&mut self, dest: u32, src: u32) -> Result<()> {
+        let source = self.load(src)?;
 
-        let destination = if (32768..=32775).contains(&destination_address) {
-            &mut self.registers[(destination_address - 32768) as usize]
+        let destination = if (32768..=32775).contains(&dest) {
+            &mut self.registers[(dest - 32768) as usize]
         } else {
-            return Err(format!(
-                "Tried to store at invalid register {} (at location 0x{:x})",
-                destination_address, self.pc
-            ));
+            return Err(Error::InvalidStore(dest));
         };
 
         *destination = source;
         Ok(())
     }
 
-    pub fn cycle(&mut self) -> Result<bool, String> {
+    pub fn cycle(&mut self) -> Result<()> {
         macro_rules! jmp {
             ($location:expr) => {
                 self.pc = self.load($location)? as usize;
@@ -116,7 +133,7 @@ impl VM {
 
         macro_rules! halt {
             () => {
-                return Ok(false);
+                return Err(Error::Halt)
             };
         }
 
@@ -152,10 +169,7 @@ impl VM {
                 if let Some(tos) = self.stack.pop() {
                     self.set(a, tos)?;
                 } else {
-                    return Err(format!(
-                        "Tried to pop from an empty stack (at location 0x{:x})",
-                        self.pc - 1
-                    ));
+                    return Err(Error::PopFromEmptyStack);
                 }
             }
 
@@ -337,14 +351,10 @@ impl VM {
             21 => { /* do nothing */ }
 
             unknown_opcode => {
-                return Err(format!(
-                    "Unknown opcode {} (at location 0x{:x})",
-                    unknown_opcode,
-                    self.pc - 1
-                ))
+                return Err(Error::UnknownOpcode(unknown_opcode));
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 }
