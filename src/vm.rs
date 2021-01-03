@@ -336,11 +336,9 @@ impl VM {
             20 => {
                 let a = self.next_argument();
 
-                let mut char_buf = [0];
-                let stdin = io::stdin();
-                let mut handle = stdin.lock();
-                if let Ok(()) = handle.read_exact(&mut char_buf) {
-                    self.set(a, u32::from(char_buf[0]))?;
+                let mut ch = 0;
+                if let Ok(()) = io::stdin().read_exact(std::slice::from_mut(&mut ch)) {
+                    self.set(a, u32::from(ch))?;
                 } else {
                     halt!();
                 }
