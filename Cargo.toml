@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 thiserror = "1.0.23"
 bytemuck = "1.4.1"
+eyre = "0.6.3"
+color-eyre = "0.5.10"

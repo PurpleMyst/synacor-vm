@@ -1,8 +1,10 @@
 use std::{env, fs, io};
 
+use eyre::{bail, Result};
+
 use synacor_vm::VM;
 
-fn main() -> synacor_vm::Result<()> {
+fn main() -> Result<()> {
     let mut vm = if let Some(snapshot) = env::args().nth(1) {
         VM::load_snapshot(io::stdin(), io::stdout(), fs::File::open(snapshot)?)?
     } else {
@@ -13,11 +15,12 @@ fn main() -> synacor_vm::Result<()> {
         match vm.cycle() {
             Ok(()) => {}
 
-            Err(synacor_vm::Error::Halt) => break,
-
             Err(err) => {
-                eprintln!("error after location {:#x}: {}", vm.pc, err);
-                break;
+                if let Some(synacor_vm::Error::Halt) = err.downcast_ref::<synacor_vm::Error>() {
+                    break;
+                }
+
+                bail!(err);
             }
         }
     }

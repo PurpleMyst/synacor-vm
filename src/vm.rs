@@ -1,8 +1,10 @@
 use std::{
-    convert::TryInto,
+    convert::{TryFrom, TryInto},
     io::{self, Read, Write},
     mem::size_of,
 };
+
+use eyre::{bail, Result};
 
 const INTEGER_SIZE: usize = 15;
 const MAX_VALUE: u32 = 1 << INTEGER_SIZE;
@@ -11,6 +13,7 @@ const REGISTER_COUNT: usize = 8;
 
 pub type Stack<T> = Vec<T>;
 
+#[derive(Clone)]
 pub struct VM<Input: Read, Output: Write> {
     pub memory: [u32; ADDRESS_SPACE],
 
@@ -26,9 +29,6 @@ pub struct VM<Input: Read, Output: Write> {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("{0}")]
-    IOError(#[from] io::Error),
-
     #[error("Tried to load invalid address {0:#x}")]
     InvalidLoad(u32),
 
@@ -44,8 +44,6 @@ pub enum Error {
     #[error("Program halted")]
     Halt,
 }
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl<Input: Read, Output: Write> VM<Input, Output> {
     pub fn load_program(input: Input, output: Output, program: &'static [u8]) -> Self {
@@ -129,7 +127,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
         } else if address <= 32775 {
             Ok(self.registers[(address - 32768) as usize])
         } else {
-            Err(Error::InvalidLoad(address))
+            bail!(Error::InvalidLoad(address))
         }
     }
 
@@ -139,7 +137,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
         let destination = if (32768..=32775).contains(&dest) {
             &mut self.registers[(dest - 32768) as usize]
         } else {
-            return Err(Error::InvalidStore(dest));
+            bail!(Error::InvalidStore(dest));
         };
 
         *destination = source;
@@ -183,19 +181,13 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
             }
         }
 
-        macro_rules! halt {
-            () => {
-                return Err(Error::Halt)
-            };
-        }
-
         let opcode = self.memory[self.pc];
         self.pc += 1;
 
         match opcode {
             // halt: 0
             //   stop execution and terminate the program
-            0 => halt!(),
+            0 => bail!(Error::Halt),
 
             // set: 1 a b
             //   set register <a> to the value of <b>
@@ -221,7 +213,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
                 if let Some(tos) = self.stack.pop() {
                     self.set(a, tos)?;
                 } else {
-                    return Err(Error::PopFromEmptyStack);
+                    bail!(Error::PopFromEmptyStack);
                 }
             }
 
@@ -371,7 +363,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
                 if let Some(tos) = self.stack.pop() {
                     jmp!(tos);
                 } else {
-                    halt!();
+                    bail!(Error::Halt);
                 }
             }
 
@@ -393,7 +385,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
 
                 loop {
                     if let Err(..) = self.input.read_exact(std::slice::from_mut(&mut ch)) {
-                        halt!();
+                        bail!(Error::Halt);
                     }
 
                     // Skip over the CR in windows' line ending
@@ -410,10 +402,44 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
             21 => { /* do nothing */ }
 
             unknown_opcode => {
-                return Err(Error::UnknownOpcode(unknown_opcode));
+                bail!(Error::UnknownOpcode(unknown_opcode));
             }
         }
 
         Ok(())
+    }
+}
+
+impl<Output: Write> VM<io::Cursor<Vec<u8>>, Output> {
+    pub fn append_input<B: AsRef<[u8]>>(&mut self, buf: B) -> Result<()> {
+        use io::{Seek, SeekFrom};
+        let pos = self.input.position();
+        self.input.seek(SeekFrom::End(0))?;
+        self.input.write_all(buf.as_ref())?;
+        self.input.set_position(pos);
+        Ok(())
+    }
+}
+
+impl<Input: Read> VM<Input, io::Cursor<Vec<u8>>> {
+    pub fn cycle_until_next_room(&mut self) -> Result<(String, Option<crate::Room>)> {
+        let pos = usize::try_from(self.output.position())?;
+
+        while !self.output.get_ref()[pos..].ends_with(b"What do you do?") {
+            match self.cycle() {
+                Ok(()) => {}
+                Err(err) => {
+                    if let Some(Error::Halt) = err.downcast_ref::<Error>() {
+                        break;
+                    }
+
+                    bail!(err);
+                }
+            }
+        }
+
+        self.output.set_position(pos as u64);
+
+        Ok(crate::Room::parse(&mut self.output)?)
     }
 }
