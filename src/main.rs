@@ -1,11 +1,5 @@
 use std::{env, fs};
 
-extern crate colored;
-
-extern crate serde;
-
-extern crate serde_json;
-
 mod vm;
 
 fn main() {
