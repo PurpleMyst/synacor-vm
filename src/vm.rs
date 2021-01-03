@@ -1,11 +1,8 @@
 use std::{
-    fmt, fs,
+    fs,
     io::{self, Read},
     num::Wrapping,
 };
-
-use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
-use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 const INTEGER_SIZE: usize = 15;
 const MAX_VALUE: u16 = 1 << INTEGER_SIZE;
@@ -14,140 +11,21 @@ const REGISTER_COUNT: usize = 8;
 
 pub type Stack<T> = Vec<T>;
 
+serde_big_array::big_array! {
+    BigArray; ADDRESS_SPACE, REGISTER_COUNT
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct VM {
+    #[serde(with = "BigArray")]
     memory: [u16; ADDRESS_SPACE],
+
+    #[serde(with = "BigArray")]
     registers: [u16; REGISTER_COUNT],
+
     stack: Stack<u16>,
 
     pc: usize,
-}
-
-impl Serialize for VM {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("VM", 4)?;
-
-        macro_rules! u16slice_to_vec {
-            (self. $name:ident) => {
-                &self.$name.iter().cloned().collect::<Vec<u16>>()
-            };
-        }
-
-        state.serialize_field("memory", u16slice_to_vec!(self.memory))?;
-        state.serialize_field("registers", u16slice_to_vec!(self.registers))?;
-        state.serialize_field("stack", &self.stack)?;
-        state.serialize_field("pc", &self.pc)?;
-        state.end()
-    }
-}
-
-// Lasciate ogne speranza, voi ch'intrate
-impl<'de> Deserialize<'de> for VM {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        enum VMField {
-            U16Array(Vec<u16>),
-            USize(usize),
-        };
-
-        impl<'de> Deserialize<'de> for VMField {
-            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                struct ValueVisitor;
-
-                impl<'de> Visitor<'de> for ValueVisitor {
-                    type Value = VMField;
-
-                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                        formatter.write_str("stuff")
-                    }
-
-                    fn visit_u64<E: de::Error>(self, value: u64) -> Result<Self::Value, E> {
-                        Ok(VMField::USize(value as usize))
-                    }
-
-                    fn visit_seq<V: SeqAccess<'de>>(
-                        self,
-                        mut seq: V,
-                    ) -> Result<Self::Value, V::Error> {
-                        let mut result = Vec::new();
-                        while let Some(element) = seq.next_element()? {
-                            result.push(element);
-                        }
-                        Ok(VMField::U16Array(result))
-                    }
-                }
-
-                deserializer.deserialize_any(ValueVisitor)
-            }
-        }
-
-        struct VMVisitor;
-
-        impl<'de> Visitor<'de> for VMVisitor {
-            type Value = VM;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct VM")
-            }
-
-            fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<Self::Value, V::Error> {
-                macro_rules! elements {
-                    ($($name:ident : $ty:ty),*) => {
-                        $(
-                        let $name: $ty = seq.next_element()?
-                                            .ok_or_else(|| de::Error::invalid_length(4, &self))?;
-                        )*
-                    }
-                }
-
-                elements!(
-                    memory_values: Vec<u16>,
-                    registers_values: Vec<u16>,
-                    stack: Stack<u16>,
-                    pc: usize
-                );
-
-                let mut memory = [0; ADDRESS_SPACE];
-                memory.copy_from_slice(&memory_values);
-
-                let mut registers = [0; REGISTER_COUNT];
-                registers.copy_from_slice(&registers_values);
-
-                Ok(VM {
-                    memory,
-                    registers,
-                    stack,
-                    pc,
-                })
-            }
-
-            fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<Self::Value, V::Error> {
-                let mut memory = [0; ADDRESS_SPACE];
-                let mut registers = [0; REGISTER_COUNT];
-                let mut stack: Option<Stack<u16>> = None;
-                let mut pc: Option<usize> = None;
-
-                while let Some((key, value)) = map.next_entry()? {
-                    match (key, value) {
-                        ("memory", VMField::U16Array(slice)) => memory.copy_from_slice(&slice),
-                        ("registers", VMField::U16Array(slice)) => {
-                            registers.copy_from_slice(&slice)
-                        }
-                        ("stack", VMField::U16Array(slice)) => stack = Some(slice),
-                        ("pc", VMField::USize(value)) => pc = Some(value),
-                        _ => return Err(de::Error::custom("invalid key/value combination")),
-                    }
-                }
-
-                Ok(VM {
-                    memory,
-                    registers,
-                    stack: stack.ok_or_else(|| de::Error::missing_field("stack"))?,
-                    pc: pc.ok_or_else(|| de::Error::missing_field("pc"))?,
-                })
-            }
-        }
-
-        deserializer.deserialize_struct("VM", &["memory", "registers", "stack", "pc"], VMVisitor)
-    }
 }
 
 impl VM {
