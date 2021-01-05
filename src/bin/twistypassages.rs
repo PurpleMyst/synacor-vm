@@ -25,7 +25,7 @@ fn find_can(visited: &mut HashSet<String>, mut vm: Box<VM>, room: Room) -> Resul
 
         let next_room = vm.cycle_until_next_room()?.1;
         if let Some(next_room) = next_room {
-            if visited.insert(next_room.flavor.clone()) {
+            if visited.insert(next_room.description.clone()) {
                 if let Some(can) = find_can(visited, vm, next_room)? {
                     return Ok(Some(can));
                 }
@@ -60,7 +60,7 @@ fn walk(visited: &mut HashSet<String>, vm: Box<VM>, room: Room) -> Result<()> {
         }
 
         if let Some(next_room) = next_room {
-            if visited.insert(next_room.flavor.clone()) {
+            if visited.insert(next_room.description.clone()) {
                 walk(visited, vm, next_room)?;
             }
         }

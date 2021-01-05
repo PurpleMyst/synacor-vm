@@ -11,7 +11,43 @@ const MAX_VALUE: u32 = 1 << INTEGER_SIZE;
 const ADDRESS_SPACE: usize = MAX_VALUE as usize;
 const REGISTER_COUNT: usize = 8;
 
-pub type Stack<T> = Vec<T>;
+pub const INSTRUCTION_NAMES_AND_ARGS: [(&str, usize); 22] = [
+    ("halt", 0),
+    ("set", 2),
+    ("push", 1),
+    ("pop", 1),
+    ("eq", 3),
+    ("gt", 3),
+    ("jmp", 1),
+    ("jt", 2),
+    ("jf", 2),
+    ("add", 3),
+    ("mult", 3),
+    ("mod", 3),
+    ("and", 3),
+    ("or", 3),
+    ("not", 2),
+    ("rmem", 2),
+    ("wmem", 2),
+    ("call", 1),
+    ("ret", 0),
+    ("out", 1),
+    ("in", 1),
+    ("noop", 0),
+];
+pub struct DisplayArgument(pub u32);
+
+impl std::fmt::Display for DisplayArgument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0 <= 32767 {
+            write!(f, "{}", self.0)
+        } else if self.0 <= 32775 {
+            write!(f, "r{}", self.0 - 32768)
+        } else {
+            Err(std::fmt::Error)
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct VM<Input: Read, Output: Write> {
@@ -19,7 +55,7 @@ pub struct VM<Input: Read, Output: Write> {
 
     pub registers: [u32; REGISTER_COUNT],
 
-    pub stack: Stack<u32>,
+    pub stack: Vec<u32>,
 
     pub pc: usize,
 
@@ -50,7 +86,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
         let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
-            stack: Stack::new(),
+            stack: Vec::new(),
             pc: 0,
             input,
             output,
@@ -86,7 +122,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
         let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
-            stack: Stack::new(),
+            stack: Vec::new(),
             pc: 0,
             input,
             output,

@@ -19,7 +19,7 @@ What do you do?
 #[derive(Debug)]
 pub struct Room {
     pub title: String,
-    pub flavor: String,
+    pub description: String,
     pub items: Vec<String>,
     pub exits: Vec<String>,
 }
@@ -28,7 +28,7 @@ impl Room {
     pub fn parse(mut b: impl io::BufRead) -> Result<(String, Option<Self>)> {
         let mut this = Self {
             title: String::new(),
-            flavor: String::new(),
+            description: String::new(),
             items: Vec::new(),
             exits: Vec::new(),
         };
@@ -67,12 +67,12 @@ impl Room {
                 break;
             }
 
-            this.flavor.push_str(&header);
+            this.description.push_str(&header);
         }
 
         // remove junk from flavor
-        if this.flavor.ends_with("\n\n") {
-            this.flavor.drain(this.flavor.len() - 2..);
+        if this.description.ends_with("\n\n") {
+            this.description.drain(this.description.len() - 2..);
         }
 
         loop {
