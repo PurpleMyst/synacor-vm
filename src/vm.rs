@@ -154,7 +154,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
         value
     }
 
-    fn load(&self, address: u32) -> Result<u32> {
+    pub fn load(&self, address: u32) -> Result<u32> {
         // - numbers 0..32767 mean a literal value
         // - numbers 32768..32775 instead mean registers 0..7
         // - numbers 32776..65535 are invalid
