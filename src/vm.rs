@@ -118,7 +118,7 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
         Ok(())
     }
 
-    pub fn load_snapshot(input: Input, output: Output, mut r: impl io::Read) -> Result<Self> {
+    pub fn load_snapshot(input: Input, output: Output, r: impl io::Read) -> Result<Self> {
         let mut this = Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
@@ -127,25 +127,29 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
             input,
             output,
         };
+        this.load_snapshot_inplace(r)?;
+        Ok(this)
+    }
 
+    pub fn load_snapshot_inplace(&mut self, mut r: impl io::Read) -> Result<()> {
         // memory: [u32; ADDRESS_SPACE]
-        r.read_exact(bytemuck::cast_slice_mut(&mut this.memory))?;
+        r.read_exact(bytemuck::cast_slice_mut(&mut self.memory))?;
 
         // registers: [u32; REGISTER_COUNT]
-        r.read_exact(bytemuck::cast_slice_mut(&mut this.registers))?;
+        r.read_exact(bytemuck::cast_slice_mut(&mut self.registers))?;
 
         // pc: usize,
         let mut pc_bytes = [0; size_of::<usize>()];
         r.read_exact(&mut pc_bytes)?;
-        this.pc = usize::from_ne_bytes(pc_bytes);
+        self.pc = usize::from_ne_bytes(pc_bytes);
 
         // stack: Stack<u32>
         let mut tos_bytes = [0; size_of::<u32>()];
         while let Ok(()) = r.read_exact(&mut tos_bytes) {
-            this.stack.push(u32::from_ne_bytes(tos_bytes));
+            self.stack.push(u32::from_ne_bytes(tos_bytes));
         }
 
-        Ok(this)
+        Ok(())
     }
 
     fn next_argument(&mut self) -> u32 {

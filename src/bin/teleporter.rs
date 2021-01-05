@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, io};
 
-use eyre::Result;
+use eyre::{eyre, Result};
 use rayon::prelude::*;
 
 use synacor_vm::VM;
@@ -86,7 +86,6 @@ impl Ackermann {
     }
 }
 
-#[allow(clippy::unnecessary_wraps)]
 fn main() -> Result<()> {
     // Load in the snapshot with the teleporter
     let mut vm = VM::load_snapshot(
@@ -118,13 +117,13 @@ fn main() -> Result<()> {
     let r7 = (0..32768u32)
         .into_par_iter()
         .find_first(|&r7| Ackermann::new(r7).ack(r0, r1) == target)
-        .unwrap();
+        .ok_or_else(|| eyre!("no r7"))?;
 
     // And set the registers appropiately
     vm.registers[0] = target;
     vm.registers[7] = r7;
 
-    // Now save the modified snapshot
+    // // Now save the modified snapshot
     vm.save_snapshot(&mut fs::File::create(
         "snapshots/04_teleporter_patched.snapshot.bin",
     )?)?;
