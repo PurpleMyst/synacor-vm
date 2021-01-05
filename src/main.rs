@@ -7,9 +7,16 @@ use std::{
 use crossterm::event::KeyCode;
 use eyre::{bail, Result};
 
-use tui::{layout::*, style::*, widgets::*};
+use tui::{
+    layout::*,
+    style::*,
+    text::{Span, Spans},
+    widgets::*,
+};
 
 type VM = synacor_vm::VM<io::Cursor<Vec<u8>>, io::Cursor<Vec<u8>>>;
+
+const NOTABLE_ADDRESSES: &[u32] = &[3952];
 
 fn run_until_prompt(vm: &mut VM, writes: &mut Vec<(u32, u32)>) -> Result<()> {
     let pos = usize::try_from(vm.output.position())?;
@@ -39,6 +46,8 @@ fn run_until_prompt(vm: &mut VM, writes: &mut Vec<(u32, u32)>) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    color_eyre::install()?;
+
     let mut vm = if let Some(snapshot) = env::args().nth(1) {
         VM::load_snapshot(
             io::Cursor::new(Vec::new()),
@@ -62,8 +71,12 @@ fn main() -> Result<()> {
 
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    scopeguard::defer! {
+        let _ = crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen);
+        let _ = crossterm::terminal::disable_raw_mode();
+    };
 
-    let mut writes = Vec::new();
+    let mut writes = io::Cursor::new(Vec::new());
 
     loop {
         terminal.draw(|frame| {
@@ -101,8 +114,24 @@ fn main() -> Result<()> {
 
             let writes_w = List::new(
                 writes
+                    .get_ref()
                     .iter()
-                    .map(|(dest, src)| ListItem::new(format!("{:5} <- {}", dest, src)))
+                    .skip(writes.position() as usize)
+                    .map(|(dest, src)| {
+                        let is_notable = NOTABLE_ADDRESSES.binary_search(&dest).is_ok();
+
+                        let mut dest = Span::from(format!("{:5}", dest));
+
+                        if is_notable {
+                            dest.style = dest.style.fg(Color::LightRed);
+                        }
+
+                        ListItem::new(Spans::from(vec![
+                            dest,
+                            Span::from(" <- "),
+                            Span::from(format!("{}", src)),
+                        ]))
+                    })
                     .collect::<Vec<_>>(),
             )
             .block(Block::default().borders(Borders::ALL).title("Writes"));
@@ -114,7 +143,7 @@ fn main() -> Result<()> {
 
             let chunks2 = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .constraints([Constraint::Min(11), Constraint::Percentage(100)])
                 .split(chunks[1]);
 
             frame.render_widget(output, chunks[0]);
@@ -143,13 +172,28 @@ fn main() -> Result<()> {
                 KeyCode::Enter => {
                     vm.output.seek(io::SeekFrom::End(0))?;
                     vm.append_input(b"\n")?;
-                    writes.clear();
-                    run_until_prompt(&mut vm, &mut writes)?;
+                    writes.get_mut().clear();
+                    writes.set_position(0);
+                    run_until_prompt(&mut vm, writes.get_mut())?;
+
+                    writes
+                        .get_mut()
+                        .sort_by_key(|&(dest, _)| NOTABLE_ADDRESSES.binary_search(&dest).is_err());
                 }
 
                 KeyCode::Char(ch) => vm.append_input(&[ch as u8])?,
 
                 KeyCode::Esc => break,
+
+                KeyCode::PageUp => {
+                    let new_pos = writes.position().saturating_sub(1);
+                    writes.set_position(new_pos);
+                }
+
+                KeyCode::PageDown => {
+                    let new_pos = writes.position() + 1;
+                    writes.set_position(new_pos);
+                }
 
                 KeyCode::F(_)
                 | KeyCode::Null
@@ -159,8 +203,6 @@ fn main() -> Result<()> {
                 | KeyCode::Down
                 | KeyCode::Home
                 | KeyCode::End
-                | KeyCode::PageUp
-                | KeyCode::PageDown
                 | KeyCode::Tab
                 | KeyCode::BackTab
                 | KeyCode::Delete
@@ -170,9 +212,6 @@ fn main() -> Result<()> {
             crossterm::event::Event::Resize(..) => {}
         }
     }
-
-    crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
-    crossterm::terminal::disable_raw_mode()?;
 
     vm.save_snapshot(fs::File::create("snapshot.bin")?)?;
 

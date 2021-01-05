@@ -588,6 +588,7 @@ dependencies = [
  "crossterm",
  "eyre",
  "rayon",
+ "scopeguard",
  "thiserror",
  "tui",
 ]
