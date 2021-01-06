@@ -123,7 +123,7 @@ fn main() -> Result<()> {
     vm.registers[0] = target;
     vm.registers[7] = r7;
 
-    // // Now save the modified snapshot
+    // Now save the modified snapshot
     vm.save_snapshot(&mut fs::File::create(
         "snapshots/04_teleporter_patched.snapshot.bin",
     )?)?;
