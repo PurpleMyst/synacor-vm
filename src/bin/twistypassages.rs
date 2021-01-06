@@ -54,7 +54,6 @@ fn walk(visited: &mut HashSet<String>, vm: Box<VM>, room: Room) -> Result<()> {
             /* do nothing */
         } else if prelude.starts_with("Chiseled") {
             eprintln!("{}", prelude);
-            vm.save_snapshot(&mut fs::File::create("chiseled.snapshot.bin")?)?;
         } else {
             bail!(eyre!("Unknown prelude: {:?}", prelude));
         }
