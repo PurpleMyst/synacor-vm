@@ -1,10 +1,13 @@
 use std::{
     convert::TryFrom,
     env, fs,
-    io::{self, Seek, Write},
+    io::{self, Cursor, Seek, Write},
 };
 
-use crossterm::{event::KeyCode, write_ansi_code};
+use crossterm::{
+    event::{Event, KeyCode},
+    write_ansi_code,
+};
 use eyre::{bail, Result};
 
 use tui::{
@@ -14,7 +17,7 @@ use tui::{
     widgets::*,
 };
 
-type VM = synacor_vm::VM<io::Cursor<Vec<u8>>, io::Cursor<Vec<u8>>>;
+type VM = synacor_vm::VM<Cursor<Vec<u8>>, Cursor<Vec<u8>>>;
 
 fn run_until_prompt(vm: &mut VM, writes: &mut Vec<(u32, u32)>) -> Result<()> {
     let pos = usize::try_from(vm.output.position())?;
@@ -53,7 +56,7 @@ fn make_output_widget(vm: &VM) -> Paragraph {
     .wrap(Wrap { trim: true })
 }
 
-fn make_writes_widget(writes: &io::Cursor<Vec<(u32, u32)>>) -> List {
+fn make_writes_widget(writes: &Cursor<Vec<(u32, u32)>>) -> List {
     List::new(
         writes
             .get_ref()
@@ -102,14 +105,14 @@ fn main() -> Result<()> {
 
     let mut vm = Box::new(if let Some(snapshot) = env::args().nth(1) {
         VM::load_snapshot(
-            io::Cursor::new(Vec::new()),
-            io::Cursor::new(Vec::new()),
+            Cursor::new(Vec::new()),
+            Cursor::new(Vec::new()),
             fs::File::open(snapshot)?,
         )?
     } else {
         VM::load_program(
-            io::Cursor::new(Vec::new()),
-            io::Cursor::new(Vec::new()),
+            Cursor::new(Vec::new()),
+            Cursor::new(Vec::new()),
             include_bytes!("challenge.bin"),
         )
     });
@@ -130,7 +133,7 @@ fn main() -> Result<()> {
         let _ = crossterm::terminal::disable_raw_mode();
     };
 
-    let mut writes = io::Cursor::new(Vec::new());
+    let mut writes = Cursor::new(Vec::new());
 
     loop {
         terminal.draw(|frame| {
@@ -156,7 +159,7 @@ fn main() -> Result<()> {
         })?;
 
         match crossterm::event::read()? {
-            crossterm::event::Event::Key(evt) => match evt.code {
+            Event::Key(evt) => match evt.code {
                 KeyCode::Backspace => {
                     if !vm.input.get_ref().is_empty() {
                         vm.input.get_mut().pop();
@@ -199,8 +202,10 @@ fn main() -> Result<()> {
                 | KeyCode::Delete
                 | KeyCode::Insert => {}
             },
-            crossterm::event::Event::Mouse(..) => unreachable!(),
-            crossterm::event::Event::Resize(..) => {}
+
+            Event::Mouse(..) => unreachable!(),
+
+            Event::Resize(..) => {}
         }
     }
 
