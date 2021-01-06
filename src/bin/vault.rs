@@ -1,18 +1,17 @@
 use array_iterator::ArrayIterator;
 use io::Cursor;
-use std::{
-    cmp::Reverse,
-    collections::{hash_map::Entry, HashMap, HashSet},
-    fmt::Display,
-    fs, io,
-    str::FromStr,
-};
+use priority_queue::PriorityQueue;
+use std::{cmp::Reverse, collections::HashMap, fmt::Display, fs, io, str::FromStr};
 
-use eyre::{bail, eyre, Report, Result};
+use eyre::{eyre, Report, Result};
 
 use synacor_vm::Room;
 
+const GRID_SIDE: i64 = 4;
+const TARGET_WEIGHT: i32 = 30;
+
 type VM = synacor_vm::VM<Cursor<Vec<u8>>, Cursor<Vec<u8>>>;
+
 #[derive(Clone, Copy, Debug)]
 enum Cell {
     Num(i32),
@@ -35,7 +34,7 @@ impl Display for Cell {
 impl FromStr for Cell {
     type Err = Report;
 
-    fn from_str(desc: &str) -> Result<Self, Self::Err> {
+    fn from_str(desc: &str) -> Result<Self> {
         Ok(if desc.contains('+') {
             Cell::Add
         } else if desc.contains('-') {
@@ -44,8 +43,7 @@ impl FromStr for Cell {
             Cell::Mul
         } else {
             let start = desc.find('\'').ok_or_else(|| eyre!("weird desc"))?;
-            let end = start
-                + 1
+            let end = (start + 1)
                 + desc[start + 1..]
                     .find('\'')
                     .ok_or_else(|| eyre!("weird desc"))?;
@@ -53,150 +51,85 @@ impl FromStr for Cell {
         })
     }
 }
-
-// #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-// enum Color {
-//     Green,
-//     Yellow,
-//     Red,
-// }
-
-// impl FromStr for Color {
-//     type Err = Report;
-
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         let flashes = s.find("flashes ").ok_or_else(|| eyre!("no flashes"))?;
-//         Ok(match s[flashes..].splitn(3, ' ').nth(1) {
-//             Some("green.") => Self::Green,
-//             Some("yellow.") => Self::Yellow,
-//             Some("red.") => Self::Red,
-//             color => bail!("unknown color {:?}", color),
-//         })
-//     }
-// }
-
 fn walk(
     grid: &mut HashMap<(i64, i64), Cell>,
     (x, y): (i64, i64),
     vm: Box<VM>,
-    prelude: String,
     room: Room,
     len: usize,
 ) -> Result<()> {
-    match grid.entry((x, y)) {
-        Entry::Occupied(entry) => {
-            return Ok(());
-        }
-
-        Entry::Vacant(entry) => {
-            entry.insert(room.description.parse()?);
-        }
+    // don't revisit visited squares
+    if grid.insert((x, y), room.description.parse()?).is_some() {
+        return Ok(());
     }
 
+    // the orb disappears at the vault door
     if room.title == "Vault Door" {
         return Ok(());
     }
 
     for exit in room.exits.into_iter() {
+        // go into every exit
         let mut vm = vm.clone();
         vm.append_input(&exit)?;
         vm.append_input("\n")?;
-
         let (prelude, next_room) = vm.cycle_until_next_room()?;
 
+        // calculate the next position
         let next_pos = match exit.as_ref() {
             "east" => (x + 1, y),
             "west" => (x - 1, y),
             "north" => (x, y + 1),
             "south" => (x, y - 1),
+            // don't try to enter the vault
             "vault" => continue,
-            _ => unreachable!("{:?}", exit),
+            _ => unreachable!(),
         };
 
-        // print!(
-        //     "{:?} => {:?} ({:?})",
-        //     (x, y),
-        //     next_pos,
-        //     prelude.parse::<Color>().ok()
-        // );
-
-        // print!(
-        //     "\x1b[{}m{}\x1b[0m ",
-        //     match prelude.parse::<Color>().ok() {
-        //         Some(Color::Red) => 31,
-        //         Some(Color::Green) => 32,
-        //         Some(Color::Yellow) => 33,
-        //         None => 30,
-        //     },
-        //     len + 1
-        // );
-
+        // if the orb shatters, we can't go in this direction
         if prelude.contains("shatter") {
-            // print!(" SHATTER");
             continue;
         }
-        // println!()
 
         if let Some(next_room) = next_room {
+            // avoid going outside the grid
             if !next_room.title.starts_with("Vault") || next_room.title == "Vault Antechamber" {
                 continue;
             }
 
-            walk(grid, next_pos, vm, prelude, next_room, len + 1)?;
+            // keep exploring from the next position
+            walk(grid, next_pos, vm, next_room, len + 1)?;
         }
-
-        // println!();
     }
 
     Ok(())
 }
 
 fn pathfind(graph: &mut HashMap<(i64, i64), Cell>) -> Vec<(i64, i64)> {
-    //  1  function Dijkstra(Graph, source):
-    //  2      dist[source] ← 0                           // Initialization
-    //  3
-    //  4      create vertex priority queue Q
-    //  5
-    //  6      for each vertex v in Graph:
-    //  7          if v ≠ source
-    //  8              dist[v] ← INFINITY                 // Unknown distance from source to v
-    //  9              prev[v] ← UNDEFINED                // Predecessor of v
-    // 10
-    // 11         Q.add_with_priority(v, dist[v])
-    // 12
-    // 13
-    // 14     while Q is not empty:                      // The main loop
-    // 15         u ← Q.extract_min()                    // Remove and return best vertex
-    // 16         for each neighbor v of u:              // only v that are still in Q
-    // 17             alt ← dist[u] + length(u, v)
-    // 18             if alt < dist[v]
-    // 19                 dist[v] ← alt
-    // 20                 prev[v] ← u
-    // 21                 Q.decrease_priority(v, alt)
-    // 22
-    // 23     return dist, prev
-
+    // map nodes to the currently known shortest path to get there
     let mut dist = HashMap::new();
     dist.insert((0, 0, 22), 0);
 
+    // map nodes to their parent on the currently known shortest path to get there
     let mut prev: HashMap<(i64, i64, i32), (i64, i64, i32)> = HashMap::new();
 
-    let mut q = priority_queue::PriorityQueue::new();
+    // priority queue: we use Reverse() to turn "pop" into a "give me the one with the lowest distance"
+    let mut q = PriorityQueue::new();
     q.push((0, 0, 22), Reverse(0));
 
     while let Some(((x, y, w), Reverse(d))) = q.pop() {
-        if (x, y, w) == (3, 3, 30) {
+        if (x, y, w) == (GRID_SIDE - 1, GRID_SIDE - 1, TARGET_WEIGHT) {
+            // if we've gotten to the door with the correct weight, reconstruct the path and return it
             let mut crumb = (x, y, w);
             let mut path = vec![(x, y)];
             while let Some(ncrumb) = prev.get(&crumb) {
-                println!("{:?}", ncrumb);
                 path.push((ncrumb.0, ncrumb.1));
                 crumb = *ncrumb;
             }
             path.reverse();
             return path;
-        } else if (x, y) == (3, 3) {
-            // orb disappaers in throne room
+        } else if (x, y) == (GRID_SIDE - 1, GRID_SIDE - 1) {
+            // otherwise, the orb disappaers in throne room
             continue;
         }
 
@@ -238,9 +171,7 @@ fn pathfind(graph: &mut HashMap<(i64, i64), Cell>) -> Vec<(i64, i64)> {
     unreachable!()
 }
 
-fn main() -> Result<()> {
-    color_eyre::install()?;
-
+fn find_exits() -> Result<impl Iterator<Item = &'static str>> {
     let mut vm = Box::new(VM::load_snapshot(
         io::Cursor::new(b"take orb\nlook\n".to_vec()),
         io::Cursor::new(Vec::new()),
@@ -249,18 +180,31 @@ fn main() -> Result<()> {
 
     vm.cycle_until_next_room()?;
 
-    let (prelude, start) = vm.cycle_until_next_room()?;
+    let start = vm.cycle_until_next_room()?.1.unwrap();
     let mut graph = HashMap::new();
-    walk(&mut graph, (0, 0), vm, prelude, start.unwrap(), 0)?;
-    println!();
+    walk(&mut graph, (0, 0), vm, start, 0)?;
     graph.insert((3, 3), Cell::Num(1));
 
-    let path = pathfind(&mut graph);
+    let mut path = pathfind(&mut graph).into_iter();
+    let mut prev = path.next().unwrap();
 
-    for x in path {
-        print!(" {}", graph[&x]);
-    }
-    println!();
+    Ok(path.map(move |step| {
+        let exit = match (step.0 - prev.0, step.1 - prev.1) {
+            (1, 0) => "east",
+            (-1, 0) => "west",
+            (0, 1) => "north",
+            (0, -1) => "south",
+            _ => unreachable!(),
+        };
+        prev = step;
+        exit
+    }))
+}
+
+fn main() -> Result<()> {
+    color_eyre::install()?;
+    let exits = find_exits()?;
+    println!("{}", exits.collect::<Vec<_>>().join(" "));
 
     Ok(())
 }

@@ -1,11 +1,10 @@
 use std::{
-    collections::HashMap,
     convert::TryFrom,
     env, fs,
     io::{self, Seek, Write},
 };
 
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::KeyCode;
 use eyre::{bail, Result};
 
 use crossterm::write_ansi_code;
@@ -50,8 +49,6 @@ fn run_until_prompt(vm: &mut VM, writes: &mut Vec<(u32, u32)>) -> Result<()> {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-
-    let mut snapshots: Vec<Vec<u8>> = Vec::new();
 
     let mut vm = Box::new(if let Some(snapshot) = env::args().nth(1) {
         VM::load_snapshot(
@@ -177,13 +174,6 @@ fn main() -> Result<()> {
                 }
 
                 KeyCode::Enter => {
-                    let mut snapshot = Vec::new();
-                    vm.save_snapshot(&mut snapshot)?;
-                    snapshots.push(snapshot);
-                    if snapshots.len() >= 10 {
-                        snapshots.remove(0);
-                    }
-
                     vm.output.seek(io::SeekFrom::End(0))?;
                     vm.append_input(b"\n")?;
                     writes.get_mut().clear();
@@ -208,16 +198,6 @@ fn main() -> Result<()> {
                 KeyCode::PageDown => {
                     let new_pos = writes.position() + 1;
                     writes.set_position(new_pos);
-                }
-
-                KeyCode::F(1) => {
-                    if let Some(snapshot) = snapshots.pop() {
-                        writes.get_mut().clear();
-                        writes.set_position(0);
-                        vm.input.seek(io::SeekFrom::End(0))?;
-                        vm.output.seek(io::SeekFrom::End(0))?;
-                        vm.load_snapshot_inplace(io::Cursor::new(&snapshot))?;
-                    }
                 }
 
                 KeyCode::F(..)
