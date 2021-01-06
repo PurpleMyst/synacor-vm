@@ -82,15 +82,15 @@ pub enum Error {
 }
 
 impl<Input: Read, Output: Write> VM<Input, Output> {
-    pub fn load_program(input: Input, output: Output, program: &'static [u8]) -> Self {
-        let mut this = Self {
+    pub fn load_program(input: Input, output: Output, program: &'static [u8]) -> Box<Self> {
+        let mut this = Box::new(Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
             stack: Vec::new(),
             pc: 0,
             input,
             output,
-        };
+        });
 
         program
             .chunks_exact(2)
@@ -118,15 +118,15 @@ impl<Input: Read, Output: Write> VM<Input, Output> {
         Ok(())
     }
 
-    pub fn load_snapshot(input: Input, output: Output, r: impl io::Read) -> Result<Self> {
-        let mut this = Self {
+    pub fn load_snapshot(input: Input, output: Output, r: impl io::Read) -> Result<Box<Self>> {
+        let mut this = Box::new(Self {
             memory: [0; ADDRESS_SPACE],
             registers: [0; REGISTER_COUNT],
             stack: Vec::new(),
             pc: 0,
             input,
             output,
-        };
+        });
         this.load_snapshot_inplace(r)?;
         Ok(this)
     }

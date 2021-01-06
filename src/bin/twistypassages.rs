@@ -72,11 +72,11 @@ fn walk(visited: &mut HashSet<String>, vm: Box<VM>, room: Room) -> Result<()> {
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let mut vm = Box::new(VM::load_snapshot(
+    let mut vm = VM::load_snapshot(
         io::Cursor::new(b"look\n".to_vec()),
         io::Cursor::new(Vec::new()),
         fs::File::open("snapshots/00_twistypassages.snapshot.bin")?,
-    )?);
+    )?;
 
     let start = vm.cycle_until_next_room()?.1.unwrap();
 

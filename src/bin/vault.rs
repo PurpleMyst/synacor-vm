@@ -172,11 +172,11 @@ fn pathfind(graph: &mut HashMap<(i64, i64), Cell>) -> Vec<(i64, i64)> {
 }
 
 fn find_exits() -> Result<impl Iterator<Item = &'static str>> {
-    let mut vm = Box::new(VM::load_snapshot(
+    let mut vm = VM::load_snapshot(
         io::Cursor::new(b"take orb\nlook\n".to_vec()),
         io::Cursor::new(Vec::new()),
         fs::File::open("snapshots/05_vault.snapshot.bin")?,
-    )?);
+    )?;
 
     vm.cycle_until_next_room()?;
 

@@ -106,21 +106,22 @@ fn main() -> Result<()> {
     color_eyre::install()?;
 
     let mut writes = Cursor::new(Vec::new());
-    let mut vm = Box::new(if let Some(snapshot) = env::args().nth(1) {
-        VM::load_snapshot(
+    let mut vm;
+
+    if let Some(snapshot) = env::args().nth(1) {
+        vm = VM::load_snapshot(
             Cursor::new(Vec::new()),
             Cursor::new(Vec::new()),
             fs::File::open(snapshot)?,
-        )?
+        )?;
     } else {
-        let mut vm = VM::load_program(
+        vm = VM::load_program(
             Cursor::new(Vec::new()),
             Cursor::new(Vec::new()),
             include_bytes!("challenge.bin"),
         );
         run_until_prompt(&mut vm, writes.get_mut())?;
-        vm
-    });
+    }
 
     // Initialize our tui::Terminal
     let mut terminal = {
