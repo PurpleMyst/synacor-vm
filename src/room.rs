@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use eyre::{bail, eyre, Result};
 
@@ -25,7 +25,7 @@ pub struct Room {
 }
 
 impl Room {
-    pub fn parse(mut b: impl io::BufRead) -> Result<(String, Option<Self>)> {
+    pub fn parse(b: &mut io::Cursor<Vec<u8>>) -> Result<(String, Option<Self>)> {
         let mut this = Self {
             title: String::new(),
             description: String::new(),
@@ -33,23 +33,20 @@ impl Room {
             exits: Vec::new(),
         };
 
-        // Find room start header
-        let mut ch = 0;
-        let mut prelude = String::new();
-        loop {
-            if let Err(..) = b.read_exact(std::slice::from_mut(&mut ch)) {
-                return Ok((prelude, None));
-            }
-
-            if ch == b'=' {
-                break;
-            } else {
-                prelude.push(ch as char);
-            }
+        // read everything until the room start header and treat it as the
+        // "prelude" to the room
+        let mut prelude = Vec::new();
+        b.read_until(b'=', &mut prelude)?;
+        if prelude.last() == Some(&b'=') {
+            prelude.pop();
         }
+        let prelude = String::from_utf8(prelude)?;
 
-        // read title
-        b.read_line(&mut this.title)?;
+        // read the room's title
+        if b.read_line(&mut this.title)? == 0 {
+            // if we've reached EOF, there's no room to be parsed
+            return Ok((prelude, None));
+        }
 
         // remove junk from title
         debug_assert!(this.title.starts_with("= "));
@@ -57,7 +54,7 @@ impl Room {
         this.title.drain(..2);
         this.title.drain(this.title.len() - 4..);
 
-        // Read flavor text until empty line
+        // read room description until empty line
         let mut header = String::new();
         loop {
             header.clear();
@@ -70,18 +67,16 @@ impl Room {
             this.description.push_str(&header);
         }
 
-        // remove junk from flavor
+        // remove junk from description
         if this.description.ends_with("\n\n") {
             this.description.drain(this.description.len() - 2..);
         }
 
         loop {
-            // prompt, bail
             if header == "What do you do?" {
                 break;
             }
 
-            // exits
             let list = if header.starts_with("There") {
                 &mut this.exits
             } else if header.starts_with("Things") {
