@@ -162,7 +162,10 @@ fn main() -> Result<()> {
         match crossterm::event::read()? {
             Event::Key(evt) => match evt.code {
                 KeyCode::Backspace => {
-                    if vm.input.position() > vm.input.get_ref().len() as u64 {
+                    if !matches!(
+                        vm.input.get_ref().get(vm.input.position() as usize),
+                        Some(b'\n') | None
+                    ) {
                         vm.input.get_mut().pop();
                     }
                 }
