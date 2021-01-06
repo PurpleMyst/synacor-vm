@@ -41,16 +41,18 @@ fn run_until_prompt(vm: &mut VM, writes: &mut Vec<(u32, u32)>) -> Result<()> {
         }
     }
 
-    vm.output.set_position(pos as u64);
+    let first_nonws_offset = vm.output.get_ref()[pos..]
+        .iter()
+        .position(|ch| !ch.is_ascii_whitespace())
+        .unwrap_or(0);
+    vm.output.set_position((pos + first_nonws_offset) as u64);
 
     Ok(())
 }
 
 fn make_output_widget(vm: &VM) -> Paragraph {
     Paragraph::new(
-        std::str::from_utf8(&vm.output.get_ref()[vm.output.position() as usize..])
-            .unwrap()
-            .trim(),
+        std::str::from_utf8(&vm.output.get_ref()[vm.output.position() as usize..]).unwrap(),
     )
     .block(Block::default().borders(Borders::ALL).title("Output"))
     .wrap(Wrap { trim: true })
@@ -193,12 +195,73 @@ fn main() -> Result<()> {
                     writes.set_position(new_pos);
                 }
 
+                KeyCode::Up => {
+                    // Get the output offscreen
+                    let offscreen = &vm.output.get_ref()[..vm.output.position() as usize];
+
+                    // Iterate over the offscreen lines, starting from the one
+                    // above the highest currently shown line
+                    let mut lines_above = offscreen
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, &ch)| ch == b'\n')
+                        .map(|(idx, _)| idx)
+                        .rev()
+                        .peekable();
+
+                    if let Some(mut end) = lines_above.next() {
+                        if lines_above.peek().is_some() {
+                            // If there's lines above, find the first non-empty
+                            // line above the highest currently shown line
+                            for start in lines_above {
+                                if !vm.output.get_ref()[start + 1..end].is_empty() {
+                                    end = start + 1;
+                                    break;
+                                }
+
+                                end = start;
+                            }
+
+                            vm.output.set_position(end as u64);
+                        } else {
+                            // Otherwise, we must be showing the second-highest
+                            // line so we'll set the position to the start of
+                            // hte output
+                            vm.output.set_position(0);
+                        }
+                    } else {
+                        // If there's no lines above, just set the position to 0
+                        vm.output.set_position(0);
+                    }
+                }
+
+                KeyCode::Down => {
+                    let onscreen = &vm.output.get_ref()[vm.output.position() as usize..];
+
+                    let mut lines_below = onscreen
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, &ch)| ch == b'\n')
+                        .map(|(idx, _)| idx);
+
+                    if let Some(mut start) = lines_below.next() {
+                        for end in lines_below {
+                            if !vm.output.get_ref()[start + 1..end].is_empty() {
+                                break;
+                            }
+
+                            start = end;
+                        }
+
+                        vm.output
+                            .set_position(vm.output.position() + start as u64 + 1);
+                    }
+                }
+
                 KeyCode::F(..)
                 | KeyCode::Null
                 | KeyCode::Left
                 | KeyCode::Right
-                | KeyCode::Up
-                | KeyCode::Down
                 | KeyCode::Home
                 | KeyCode::End
                 | KeyCode::Tab
