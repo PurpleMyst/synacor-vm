@@ -103,6 +103,7 @@ fn make_prompt_widget(vm: &VM) -> Paragraph {
 fn main() -> Result<()> {
     color_eyre::install()?;
 
+    let mut writes = Cursor::new(Vec::new());
     let mut vm = Box::new(if let Some(snapshot) = env::args().nth(1) {
         VM::load_snapshot(
             Cursor::new(Vec::new()),
@@ -110,11 +111,13 @@ fn main() -> Result<()> {
             fs::File::open(snapshot)?,
         )?
     } else {
-        VM::load_program(
+        let mut vm = VM::load_program(
             Cursor::new(Vec::new()),
             Cursor::new(Vec::new()),
             include_bytes!("challenge.bin"),
-        )
+        );
+        run_until_prompt(&mut vm, writes.get_mut())?;
+        vm
     });
 
     // Initialize our tui::Terminal
@@ -132,8 +135,6 @@ fn main() -> Result<()> {
         let _ = crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen);
         let _ = crossterm::terminal::disable_raw_mode();
     };
-
-    let mut writes = Cursor::new(Vec::new());
 
     loop {
         terminal.draw(|frame| {
