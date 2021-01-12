@@ -49,7 +49,7 @@ impl std::fmt::Display for DisplayArgument {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VM<Input: Read, Output: Write> {
     pub memory: [u32; ADDRESS_SPACE],
 
@@ -481,5 +481,47 @@ impl<Input: Read> VM<Input, io::Cursor<Vec<u8>>> {
         self.output.set_position(pos as u64);
 
         Ok(crate::Room::parse(&mut self.output)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn test_roundtrip(
+            memory in vec![any::<u32>(); ADDRESS_SPACE],
+            registers in vec![any::<u32>(); REGISTER_COUNT],
+            stack: Vec<u32>,
+            pc: usize,
+        ) {
+            let memory = <[u32; ADDRESS_SPACE]>::try_from(memory).unwrap();
+            let registers = <[u32; REGISTER_COUNT]>::try_from(registers).unwrap();
+
+            let vm = Box::new(VM {
+                memory,
+                registers,
+                stack,
+                pc,
+                input: io::Cursor::new(vec![]), output:
+                io::Cursor::new(vec![])
+            });
+
+            let mut buf = Vec::new();
+            vm.save_snapshot(&mut buf).unwrap();
+            prop_assert_eq!(
+                VM::load_snapshot(
+                    io::Cursor::new(vec![]),
+                    io::Cursor::new(vec![]),
+                    io::Cursor::new(buf)
+                ).unwrap(),
+                vm
+            );
+        }
     }
 }
